@@ -2,6 +2,7 @@
 
 from typing import Callable
 
+from inbox.reschedule import approval_blocker, unwrap_filled_blanks
 from inbox.schema import Draft, Message
 
 NO_DRAFT = "NO DRAFT — handle manually"
@@ -28,7 +29,7 @@ def review(
             reply = draft.reply if draft else ""
             _print_message(position, total, intent, message, reply, flags.get(message.id, []))
 
-            item = _ask(message, reply, input_fn)
+            item = _ask(message, reply, input_fn, offering_slots=intent == "reschedule_interview")
             if item is not None:
                 approved.append(item)
 
@@ -59,7 +60,9 @@ def _print_message(
         print(f"⚠ {flag}")
 
 
-def _ask(message: Message, reply: str, input_fn: Callable[[str], str]) -> dict | None:
+def _ask(
+    message: Message, reply: str, input_fn: Callable[[str], str], offering_slots: bool = False
+) -> dict | None:
     """Loop until a valid key; return the approved item, or None if rejected."""
     while True:
         key = input_fn("[a]pprove  [e]dit  [r]eject: ").strip().lower()
@@ -68,10 +71,14 @@ def _ask(message: Message, reply: str, input_fn: Callable[[str], str]) -> dict |
             if not reply.strip():
                 print("Draft is empty. Edit it or reject.")
                 continue
+            blocker = approval_blocker(reply, offering_slots)
+            if blocker:
+                print(blocker.split(", then press")[0] + ". Press e to write the reply.")
+                continue
             return _item(message, reply, edited=False)
 
         if key == "e":
-            new_reply = input_fn("New reply (one line): ").strip()
+            new_reply = unwrap_filled_blanks(input_fn("New reply (one line): ").strip())
             if not new_reply:
                 print("Empty reply, not saved.")
                 continue

@@ -19,10 +19,13 @@ from pydantic import ValidationError
 from inbox import classify, draft
 import re
 
-from inbox.checks import FIXED_FLAGS, run_checks
+from inbox.checks import FIXED_FLAGS, run_checks, unlisted_times
+from inbox.context import load_context
+from inbox.reschedule import SLOTS_TOKEN, approval_blocker, fallback_decline, unwrap_filled_blanks
 from difflib import SequenceMatcher
 
 from inbox.dedupe import NEAR_DUPLICATE_RATIO, dedupe, normalize
+from inbox.feedback import feedback_problem
 from inbox.llm import MockResponseMissing
 from inbox.schema import Message
 from main import check_drafts, group_by_intent, load_messages, make_run_dir, other_names, save
@@ -30,7 +33,8 @@ from main import check_drafts, group_by_intent, load_messages, make_run_dir, oth
 DATA_DIR = Path("data")
 SUBJECT = "Re: your application"
 MAX_WORDS = 80
-REVISION_NOTE_AFTER = 3  # soft note only; revising is never blocked
+REVISION_NOTE_AFTER = 3
+OFFER, DECLINE = "Yes, offer new slots", "No, keep the original time"  # soft note only; revising is never blocked
 
 INTENT_LABELS = {
     "needs_human": "Needs human",
@@ -43,12 +47,14 @@ INTENT_LABELS = {
     "other": "Other",
 }
 FLAG_HELP = {
+    "unlisted_time": "The reply mentions a specific time. The AI shouldn't add times on its own, so check it's one you can offer.",
     "salary": "A salary figure appears in the reply. Approve only if you meant to share it.",
     "date_commitment": "A day/date appears close to a word like 'confirm'. Check the reply doesn't promise a date you haven't agreed.",
     "offer_or_outcome": "The reply sounds like an offer or a result. Check that's been decided.",
     "other_candidate": "Another candidate's name appears in the reply. Remove it before sending.",
 }
 FLAG_LABELS = {
+    "unlisted_time": "Specific time mentioned",
     "salary": "Salary mentioned",
     "date_commitment": "Date commitment",
     "offer_or_outcome": "Offer/outcome",
@@ -91,12 +97,19 @@ def main() -> None:
     state.setdefault("revisions", {})        # msg_id -> [{"comment", "previous"}]
     state.setdefault("feedback_open", set())  # msg_ids with the "Request changes" box open
     state.setdefault("pending_replies", {})  # msg_id -> revised text to load into the text area
+    state.setdefault("templates", {})        # reschedule msg_id -> {"offer": ..., "decline": ...}
+    state.setdefault("rendered", {})         # msg_id -> the reply as the tool last built it
+    state.setdefault("kind_text", {})        # reschedule msg_id -> {"offer": text, "decline": text}
 
     sidebar()
     result = state.get("result")
     if result is None:
         empty_state()
         return
+
+    for message in result["unique"]:
+        ensure_card_state(message, result)
+    refresh_flags(result)  # flags always match what's in the reply boxes right now
 
     metrics(result)
     intent_tabs(result)
@@ -130,6 +143,9 @@ def sidebar() -> None:
                     state.revisions = {}
                     state.feedback_open = set()
                     state.pending_replies = {}
+                    state.templates = {}
+                    state.rendered = {}
+                    state.kind_text = {}
                     state.run_no += 1
                     state.pop("last_saved", None)
                 except Exception as exc:
@@ -167,8 +183,9 @@ def run_pipeline(path: str, mock: bool) -> dict:
             raise ValueError("empty input")
         unique, duplicates = dedupe(messages)
         classifications = classify.classify(unique)
-        drafts = draft.draft_replies(unique, classifications)
-        flags = check_drafts(unique, drafts)
+        context = load_context()  # status/salary facts from config, if present
+        drafts = draft.draft_replies(unique, classifications, context)
+        flags = check_drafts(unique, drafts, [])
     return {
         "source": path,
         "unique": unique,
@@ -177,6 +194,7 @@ def run_pipeline(path: str, mock: bool) -> dict:
         "classifications": classifications,
         "drafts": drafts,
         "flags": flags,
+        "context": context,
         "groups": group_by_intent(unique, classifications),
     }
 
@@ -296,11 +314,7 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
     status = state.decisions.get(message.id, "Pending")
     history = state.revisions.get(message.id, [])
 
-    # The text area owns the reply. Seed it once, and load a fresh revision before it renders.
-    key = text_key(message.id)
-    if message.id in state.pending_replies:
-        state[key] = state.pending_replies.pop(message.id)
-    state.setdefault(key, original)
+    key = text_key(message.id)  # seeded by ensure_card_state before anything renders
 
     with st.container(border=True):
         st.markdown(card_header(message, status), unsafe_allow_html=True)
@@ -320,8 +334,15 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
         if flags:
             st.caption("⚠ Flags are warnings for you to check, not errors. Hover a flag to see why.")
 
+        if is_reschedule(message.id, result):
+            reschedule_controls(message, result)
+
         reply = st.text_area("Draft reply", key=key, placeholder="Write a reply…", height=120,
-                             on_change=reopen_if_approved, args=(message.id,))
+                             on_change=reply_edited, args=(message.id,))
+        offering = is_reschedule(message.id, result) and current_kind(message.id) == "offer"
+        blocker = approval_blocker(reply, offering)
+        if blocker:
+            st.caption(blocker + " Approve turns on once it's done.")
         words = len(reply.split())
         note = f"{words} words"
         if is_edited(message.id, reply, original):
@@ -335,7 +356,7 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
 
         approve, changes, hold, send, _ = st.columns([1, 1.3, 1, 1.3, 1.5])
         approve.button("Approve", key=f"approve_{run_no}_{message.id}", type="primary",
-                       disabled=status == "Approved" or not reply.strip(),
+                       disabled=status == "Approved" or not reply.strip() or bool(blocker),
                        on_click=decide, args=(message.id, "Approved"), width="stretch")
         changes.button("Request changes", key=f"changes_{run_no}_{message.id}",
                        on_click=toggle_feedback, args=(message.id,), width="stretch")
@@ -350,6 +371,14 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
             st.caption("Several revisions so far. You can also edit the reply directly.")
         if message.id in state.feedback_open:
             feedback_box(message, result, reply, len(history))
+
+
+def reschedule_controls(message: Message, result: dict) -> None:
+    """Pick the version. Both were written in the first AI call, so switching never calls
+    the AI again. Slots are typed straight into the reply."""
+    run_no, msg_id = st.session_state.run_no, message.id
+    st.radio("Can the interview be moved?", [OFFER, DECLINE], horizontal=True,
+                      key=f"choice_{run_no}_{msg_id}", on_change=rebuild_reply, args=(msg_id,))
 
 
 def revision_history(history: list[dict]) -> None:
@@ -369,33 +398,43 @@ def feedback_box(message: Message, result: dict, reply: str, revision_no: int) -
     suffix = f"{state.run_no}_{message.id}_{revision_no}"  # new key per revision = empty box
     comment = st.text_area("What should change?", key=f"feedback_{suffix}", height=80,
                            placeholder="e.g. Make it shorter and ask for two time slots")
+    st.caption("Tip: a few words on what to change works best, e.g. \"Make it shorter\" "
+               "or \"Offer 1pm or 3pm\".")
     revise, cancel, _ = st.columns([1.3, 1, 4])
     cancel.button("Cancel", key=f"cancel_{suffix}", on_click=toggle_feedback,
                   args=(message.id,), width="stretch")
     if not revise.button("Revise draft", key=f"revise_{suffix}", type="primary", width="stretch"):
         return
-    if not comment.strip():
-        st.warning("Write what should change first.")
+    problem = feedback_problem(comment)
+    if problem:
+        st.warning(problem)  # nothing is sent to the AI until the comment is usable
         return
+
+    # On an untouched reschedule card, revise the version itself (with the blank) so the
+    # chosen slots are filled back in afterwards. A hand-edited reply is revised as written.
+    use_template = is_reschedule(message.id, result) and reply == state.rendered.get(message.id)
+    kind = current_kind(message.id)
+    base = state.templates[message.id][kind] if use_template else reply
 
     with st.spinner("Revising draft…"), provider_env(state.get("mock", True)):
         intent = result["classifications"][message.id].intent
-        revised = draft.revise_reply(message, intent, reply, comment.strip()).reply.strip()
+        revised = draft.revise_reply(message, intent, base, comment.strip(),
+                                     result["context"]).reply.strip()
 
-    if not revised or revised == reply.strip():
-        hint = (" Mock mode is on and can only replay recorded responses; turn it off in the "
-                "sidebar to revise with the live model." if state.get("mock", True) else "")
-        st.warning("Couldn't revise this draft, so it's unchanged. Try again or edit it manually."
-                   + hint)
+    if not revised or revised == base.strip():
+        if state.get("mock", True):
+            st.info("The draft stayed the same because Mock mode only replays saved responses. "
+                    "Turn Mock mode off in the sidebar to revise with the live model.")
+        else:
+            st.info("The draft stayed the same. The comment may not have been clear enough to act on. "
+                    "You could try rephrasing it, or edit the reply directly above.")
         return
 
     state.revisions.setdefault(message.id, []).append({"comment": comment.strip(), "previous": reply})
+    if use_template:
+        state.templates[message.id][kind] = revised
+        revised = render_reply(message.id, result)
     state.pending_replies[message.id] = revised
-    flags = run_checks(revised, other_names(result["unique"], message))
-    if flags:
-        result["flags"][message.id] = flags
-    else:
-        result["flags"].pop(message.id, None)
     state.decisions.pop(message.id, None)  # back to Pending
     state.approved_at.pop(message.id, None)
     state.feedback_open.discard(message.id)
@@ -453,6 +492,71 @@ def outbox_section(result: dict) -> None:
                    f"`{st.session_state.last_saved}`")
 
 
+# --- reply building ----------------------------------------------------------------------
+
+
+def is_reschedule(msg_id: int, result: dict) -> bool:
+    return result["classifications"][msg_id].intent == "reschedule_interview"
+
+
+def current_kind(msg_id: int) -> str:
+    choice = st.session_state.get(f"choice_{st.session_state.run_no}_{msg_id}", OFFER)
+    return "offer" if choice == OFFER else "decline"
+
+
+def render_reply(msg_id: int, result: dict) -> str:
+    """The reply as the tool builds it: the draft, or the chosen reschedule version."""
+    if not is_reschedule(msg_id, result):
+        return result["drafts"][msg_id].reply
+    return st.session_state.templates[msg_id][current_kind(msg_id)]
+
+
+def ensure_card_state(message: Message, result: dict) -> None:
+    """Seed the reply box once per run, and load any fresh revision, before anything renders."""
+    state, msg_id = st.session_state, message.id
+    if is_reschedule(msg_id, result) and msg_id not in state.templates:
+        draft_ = result["drafts"][msg_id]
+        first = message.from_name.split()[0] if message.from_name.split() else "there"
+        state.templates[msg_id] = {"offer": draft_.reply,
+                                   "decline": draft_.alt_reply or fallback_decline(first)}
+    key = text_key(msg_id)
+    if msg_id in state.pending_replies:
+        state[key] = state.rendered[msg_id] = state.pending_replies.pop(msg_id)
+    elif key not in state:
+        state[key] = state.rendered[msg_id] = render_reply(msg_id, result)
+
+
+def rebuild_reply(msg_id: int) -> None:
+    """Version switched: keep what was typed in the old one, show the new one. No AI call."""
+    state = st.session_state
+    texts = state.kind_text.setdefault(msg_id, {})
+    new_kind = current_kind(msg_id)
+    old_kind = "decline" if new_kind == "offer" else "offer"
+    texts[old_kind] = state.get(text_key(msg_id), "")
+    state.rendered[msg_id] = render_reply(msg_id, state.result)
+    state[text_key(msg_id)] = texts.get(new_kind) or state.rendered[msg_id]
+    reopen_if_approved(msg_id)
+
+
+def allowed_times(msg_id: int, result: dict) -> list[str] | None:
+    """Times a reply may mention. A reschedule offer: whatever the approver typed (no check).
+    Every other reply: none, since the AI is told never to write a time."""
+    if is_reschedule(msg_id, result) and current_kind(msg_id) == "offer":
+        return None
+    return []
+
+
+def refresh_flags(result: dict) -> None:
+    for message in result["unique"]:
+        reply = st.session_state.get(text_key(message.id), "")
+        found = run_checks(reply, other_names(result["unique"], message),
+                           allowed_times(message.id, result)) if reply.strip() else []
+        if found:
+            result["flags"][message.id] = found
+        else:
+            result["flags"].pop(message.id, None)
+
+
 # --- flag evidence ---------------------------------------------------------------------
 
 
@@ -463,6 +567,8 @@ def reply_for_flags(msg_id: int, result: dict) -> str:
 
 def flag_evidence(flag: str, reply: str, result: dict, message: Message) -> str:
     """The words in the reply that tripped this flag, using the same patterns as checks.py."""
+    if flag == "unlisted_time":
+        return ", ".join(unlisted_times(reply, allowed_times(message.id, result) or []))
     if flag == "other_candidate":
         for name in other_names(result["unique"], message):
             hit = re.search(rf"(?<!\w){re.escape(name)}(?!\w)", reply, re.IGNORECASE)
@@ -510,6 +616,7 @@ def outbox_items(result: dict) -> list[dict]:
                 "original_message": message.text,
                 "flags": result["flags"].get(message.id, []),
                 "revisions": len(state.revisions.get(message.id, [])),
+                "reschedule": current_kind(message.id) if is_reschedule(message.id, result) else "",
                 "approved_at": state.approved_at.get(message.id, ""),
                 "status": "ready_to_send",
             })
@@ -517,8 +624,9 @@ def outbox_items(result: dict) -> list[dict]:
 
 
 def is_edited(msg_id: int, reply: str, original: str) -> bool:
-    """Changed by hand or revised by the model at least once."""
-    return reply.strip() != original.strip() or bool(st.session_state.revisions.get(msg_id))
+    """Changed by hand or revised by the model. Picking slots or a version doesn't count."""
+    built = st.session_state.rendered.get(msg_id, original)
+    return reply.strip() != built.strip() or bool(st.session_state.revisions.get(msg_id))
 
 
 def decision_counts(result: dict) -> dict[str, int]:
@@ -536,6 +644,13 @@ def decide(msg_id: int, status: str) -> None:
         st.session_state.approved_at.pop(msg_id, None)
     st.session_state.feedback_open.discard(msg_id)
     st.session_state.pop("last_saved", None)
+
+
+def reply_edited(msg_id: int) -> None:
+    """Reviewer applied an edit: tidy filled-in blanks, and re-open the card if it was approved."""
+    key = text_key(msg_id)
+    st.session_state[key] = unwrap_filled_blanks(st.session_state.get(key, ""))
+    reopen_if_approved(msg_id)
 
 
 def reopen_if_approved(msg_id: int) -> None:

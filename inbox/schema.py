@@ -41,8 +41,9 @@ class ClassificationResponse(BaseModel):
 class Draft(BaseModel):
     id: int
     reply: str
+    alt_reply: str = ""  # reschedule only: the "can't change the time" version
 
-    @field_validator("reply")
+    @field_validator("reply", "alt_reply")
     @classmethod
     def reply_within_word_limit(cls, value: str) -> str:
         word_count = len(value.split())

@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 
 from inbox import classify, draft, llm
 from inbox.checks import run_checks
+from inbox.context import DEFAULT_PATH, load_context
 from inbox.dedupe import dedupe
 from inbox.review import review
 from inbox.schema import Classification, Draft, Intent, Message
@@ -26,8 +27,9 @@ def main() -> None:
     unique, duplicates = dedupe(messages)
     classifications = classify.classify(unique)
     groups = group_by_intent(unique, classifications)
-    drafts = draft.draft_replies(unique, classifications)
-    flags = check_drafts(unique, drafts)
+    context = load_context(args.context)
+    drafts = draft.draft_replies(unique, classifications, context)
+    flags = check_drafts(unique, drafts, [])  # terminal: approver types slots with [e]dit
 
     # Saved before review so a Ctrl-C during review keeps the pipeline output.
     run_dir = make_run_dir()
@@ -44,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Inbox Helper")
     parser.add_argument("--input", default="data/messages.json")
     parser.add_argument("--mock", action="store_true", help="replay recorded LLM responses")
+    parser.add_argument("--context", default=str(DEFAULT_PATH),
+                        help="recruiter facts: interview slots, reschedule policy, status timeline")
     return parser.parse_args()
 
 
@@ -61,12 +65,14 @@ def group_by_intent(
     return {intent: items for intent, items in groups.items() if items}
 
 
-def check_drafts(messages: list[Message], drafts: dict[int, Draft]) -> dict[int, list[str]]:
+def check_drafts(
+    messages: list[Message], drafts: dict[int, Draft], allowed_slots: list[str] | None = None
+) -> dict[int, list[str]]:
     flags = {}
     for message in messages:
         reply = drafts[message.id].reply
         if reply.strip():
-            flags[message.id] = run_checks(reply, other_names(messages, message))
+            flags[message.id] = run_checks(reply, other_names(messages, message), allowed_slots)
     return {msg_id: found for msg_id, found in flags.items() if found}
 
 

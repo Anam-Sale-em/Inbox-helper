@@ -54,9 +54,47 @@ FIXED_FLAGS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
-def run_checks(reply: str, other_candidate_names: list[str]) -> list[str]:
-    """Return flag labels for this reply, in a fixed order, each at most once."""
+# Clock times: "3 PM", "3:00pm", "11 am", "15:00".
+CLOCK_TIME = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\b\.?"   # 12-hour with am/pm
+    r"|\b([01]?\d|2[0-3]):([0-5]\d)\b",                    # 24-hour
+    re.IGNORECASE,
+)
+
+
+def times_in(text: str) -> list[tuple[int, str]]:
+    """Every clock time in the text as (minutes after midnight, the words that matched)."""
+    found = []
+    for m in CLOCK_TIME.finditer(text):
+        if m.group(3):
+            hour, minute = int(m.group(1)) % 12, int(m.group(2) or 0)
+            if m.group(3).lower() == "p":
+                hour += 12
+        else:
+            hour, minute = int(m.group(4)), int(m.group(5))
+        found.append((hour * 60 + minute, m.group(0).strip()))
+    return found
+
+
+def unlisted_times(reply: str, allowed_slots: list[str]) -> list[str]:
+    """Times in the reply that don't match any of the recruiter's slots."""
+    allowed = {minutes for slot in allowed_slots for minutes, _ in times_in(slot)}
+    return [words for minutes, words in times_in(reply) if minutes not in allowed]
+
+
+def run_checks(
+    reply: str,
+    other_candidate_names: list[str],
+    allowed_slots: list[str] | None = None,
+) -> list[str]:
+    """Return flag labels for this reply, in a fixed order, each at most once.
+
+    allowed_slots=None skips the slot check (no facts given); an empty list means
+    no times are allowed, so any time in the reply is flagged.
+    """
     flags = [label for label, pattern in FIXED_FLAGS if pattern.search(reply)]
+    if allowed_slots is not None and unlisted_times(reply, allowed_slots):
+        flags.append("unlisted_time")
     if _mentions_any(reply, other_candidate_names):
         flags.append("other_candidate")
     return flags

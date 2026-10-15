@@ -7,7 +7,9 @@ def test_review_approve_reject_edit():
     first = make_message(1, email="asha@example.com")
     second = make_message(2, name="Ravi Kumar", email="ravi@example.com")
     third = make_message(3, name="Meera Shah", email="meera@example.com")
-    groups = {"reschedule_interview": [first, second], "other": [third]}
+    # Neutral category: this test is about the a/r/e keys. Reschedule offers also need a
+    # time before approval, which tests/test_reschedule.py covers.
+    groups = {"application_status": [first, second], "other": [third]}
     drafts = {
         1: Draft(id=1, reply="Hi Asha, I'll check with the team."),
         2: Draft(id=2, reply="Hi Ravi, thanks for writing."),
