@@ -3,6 +3,7 @@
 import hashlib
 import os
 import sys
+import threading
 import time
 from functools import cache
 from pathlib import Path
@@ -29,6 +30,33 @@ class MockResponseMissing(LookupError):
 
 
 _stats: dict[str, Any] = {"retries": 0, "fallbacks": 0, "provider_used": {}}
+_lock = threading.Lock()  # drafting runs batches in parallel threads
+
+# One entry per answered call: provider, seconds, input/output/thinking tokens.
+_usage: list[dict[str, Any]] = []
+
+
+def get_usage() -> list[dict[str, Any]]:
+    with _lock:
+        return [dict(u) for u in _usage]
+
+
+def reset_usage() -> None:
+    with _lock:
+        _usage.clear()
+
+
+def usage_summary(calls: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    calls = get_usage() if calls is None else calls
+    total = lambda key: sum(c.get(key) or 0 for c in calls)  # noqa: E731
+    return {
+        "calls": len(calls),
+        "input_tokens": total("input_tokens"),
+        "output_tokens": total("output_tokens"),
+        "thinking_tokens": total("thinking_tokens"),
+        "seconds_total": round(total("seconds"), 1),
+        "slowest_call_seconds": round(max((c.get("seconds") or 0 for c in calls), default=0), 1),
+    }
 
 
 def get_stats() -> dict[str, Any]:
@@ -40,6 +68,7 @@ def get_stats() -> dict[str, Any]:
 
 
 def reset_stats() -> None:
+    reset_usage()
     _stats["retries"] = 0
     _stats["fallbacks"] = 0
     _stats["provider_used"] = {}
@@ -53,6 +82,7 @@ def call_llm(prompt: str, system: str | None = None) -> str:
     if provider == "mock":
         text = _load_mock(key)
         _mark_used("mock")
+        _record({"provider": "mock", "seconds": 0.0})  # replayed: no tokens spent
         return text
 
     if provider not in REAL_PROVIDERS:
@@ -65,14 +95,16 @@ def call_llm(prompt: str, system: str | None = None) -> str:
         if position > 0:
             _stats["fallbacks"] += 1
             _log(f"falling back to {name}")
+        started = time.perf_counter()
         try:
-            text = _call_with_retry(name, prompt, system)
+            text, usage = _call_with_retry(name, prompt, system)
         except Exception as exc:  # any provider failure moves us to the next one
             errors.append(f"{name}: {exc}")
             _log(f"{name} failed: {exc}")
             continue
 
         _mark_used(name)
+        _record({"provider": name, "seconds": round(time.perf_counter() - started, 2), **usage})
         if os.getenv("RECORD") == "1":
             _save_mock(key, text)
         return text
@@ -83,7 +115,7 @@ def call_llm(prompt: str, system: str | None = None) -> str:
 # --- retry -----------------------------------------------------------------
 
 
-def _call_with_retry(name: str, prompt: str, system: str | None) -> str:
+def _call_with_retry(name: str, prompt: str, system: str | None) -> tuple[str, dict]:
     call = _PROVIDERS[name]
     for attempt in range(len(BACKOFF_SECONDS) + 1):
         try:
@@ -92,7 +124,8 @@ def _call_with_retry(name: str, prompt: str, system: str | None) -> str:
             if attempt == len(BACKOFF_SECONDS) or not _is_retryable(exc):
                 raise
             delay = BACKOFF_SECONDS[attempt]
-            _stats["retries"] += 1
+            with _lock:
+                _stats["retries"] += 1
             _log(f"{name} returned HTTP {_status_code(exc)}, retrying in {delay}s")
             _sleep(delay)
     raise AssertionError("unreachable")
@@ -115,7 +148,7 @@ def _is_retryable(exc: Exception) -> bool:
 # --- providers -------------------------------------------------------------
 
 
-def _call_gemini(prompt: str, system: str | None) -> str:
+def _call_gemini(prompt: str, system: str | None) -> tuple[str, dict]:
     from google.genai import types
 
     response = _gemini_client().models.generate_content(
@@ -124,23 +157,40 @@ def _call_gemini(prompt: str, system: str | None) -> str:
         config=types.GenerateContentConfig(
             system_instruction=system,
             response_mime_type="application/json",
+            # Thinking adds time and is billed as output; short replies don't need it.
+            thinking_config=types.ThinkingConfig(thinking_budget=_thinking_budget()),
         ),
     )
-    return _non_empty(response.text, "gemini")
+    meta = response.usage_metadata
+    usage = {
+        "input_tokens": getattr(meta, "prompt_token_count", None),
+        "output_tokens": getattr(meta, "candidates_token_count", None),
+        "thinking_tokens": getattr(meta, "thoughts_token_count", None),
+    }
+    return _non_empty(response.text, "gemini"), usage
 
 
-def _call_groq(prompt: str, system: str | None) -> str:
+def _call_groq(prompt: str, system: str | None) -> tuple[str, dict]:
     messages: list[dict[str, str]] = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
+    effort = os.getenv("GROQ_REASONING_EFFORT", "low").strip()  # empty = model default
     response = _groq_client().chat.completions.create(
         model=_require_env("GROQ_MODEL"),
         messages=messages,
         response_format={"type": "json_object"},
+        extra_body={"reasoning_effort": effort} if effort else None,
     )
-    return _non_empty(response.choices[0].message.content, "groq")
+    meta = getattr(response, "usage", None)
+    details = getattr(meta, "completion_tokens_details", None)
+    usage = {
+        "input_tokens": getattr(meta, "prompt_tokens", None),
+        "output_tokens": getattr(meta, "completion_tokens", None),
+        "thinking_tokens": getattr(details, "reasoning_tokens", None),
+    }
+    return _non_empty(response.choices[0].message.content, "groq"), usage
 
 
 @cache
@@ -158,7 +208,7 @@ def _groq_client() -> Any:
     return Groq(max_retries=0)  # reads GROQ_API_KEY
 
 
-_PROVIDERS: dict[str, Callable[[str, str | None], str]] = {
+_PROVIDERS: dict[str, Callable[[str, str | None], tuple[str, dict]]] = {
     "gemini": _call_gemini,
     "groq": _call_groq,
 }
@@ -208,9 +258,23 @@ def _non_empty(text: str | None, provider: str) -> str:
     return text
 
 
+def _thinking_budget() -> int:
+    """GEMINI_THINKING_BUDGET in .env; 0 (default) turns thinking off on Flash models."""
+    try:
+        return int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
+    except ValueError:
+        return 0
+
+
+def _record(entry: dict[str, Any]) -> None:
+    with _lock:
+        _usage.append(entry)
+
+
 def _mark_used(provider: str) -> None:
-    used = _stats["provider_used"]
-    used[provider] = used.get(provider, 0) + 1
+    with _lock:
+        used = _stats["provider_used"]
+        used[provider] = used.get(provider, 0) + 1
     _log(f"answered by {provider}")
 
 

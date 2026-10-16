@@ -1,9 +1,13 @@
-"""Draft recruiter replies in batches of 10, one LLM call per batch (plus validation retries)."""
+"""Draft recruiter replies in batches of 5, a few batches in parallel (plus validation retries).
+
+Duplicates are removed before this step, so batching never changes which messages get a draft."""
 
 import html
 import json
 import sys
-from typing import Any
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Iterator
 
 from pydantic import ValidationError
 
@@ -12,7 +16,8 @@ from inbox.llm import LLMUnavailable, call_llm
 from inbox.reschedule import SLOTS_TOKEN, fallback_decline, fallback_offer, offer_problem
 from inbox.schema import Classification, Draft, DraftResponse, Message, check_ids
 
-BATCH_SIZE = 10
+BATCH_SIZE = 5     # small batches: first replies show sooner, a bad answer only redoes 5
+PARALLEL_BATCHES = 3  # batches in flight at once; stays inside free-tier per-minute limits
 MAX_RETRIES = 2
 
 SYSTEM_PROMPT = f"""You draft replies from a recruiter to messages sent by job candidates.
@@ -79,6 +84,13 @@ HOLDING_REPLY = "Hi {name}, thanks for your message. A recruiter will get back t
 
 _stats: dict[str, Any] = {"retries": 0, "batches": 0, "empty_drafts": 0, "holding_replies": 0,
                          "template_fallbacks": 0}
+_lock = threading.Lock()
+
+
+def _bump(key: str) -> int:
+    with _lock:
+        _stats[key] += 1
+        return _stats[key]
 
 
 def get_stats() -> dict[str, Any]:
@@ -96,20 +108,42 @@ def draft_replies(
     context: RecruiterContext | None = None,
 ) -> dict[int, Draft]:
     """Return {message_id: Draft} for every input message. Empty reply = handle manually."""
-    drafts: dict[int, Draft] = {}
+    drafts, batches = plan_drafts(messages, classifications)
+    for done in draft_batches(batches, classifications, context):
+        drafts.update(done)
+    return {m.id: drafts[m.id] for m in messages}
+
+
+def plan_drafts(
+    messages: list[Message], classifications: dict[int, Classification]
+) -> tuple[dict[int, Draft], list[list[Message]]]:
+    """Split into replies ready now (no AI) and batches of BATCH_SIZE that need the AI."""
+    ready: dict[int, Draft] = {}
     to_draft: list[Message] = []
     for m in messages:
         # needs_human never reaches the model, so any instruction inside it can't be acted on.
         if _intent_for(m.id, classifications) == "needs_human":
-            _stats["holding_replies"] += 1
-            drafts[m.id] = Draft(id=m.id, reply=holding_reply(m))
+            _bump("holding_replies")
+            ready[m.id] = Draft(id=m.id, reply=holding_reply(m))
         else:
             to_draft.append(m)
+    batches = [to_draft[i : i + BATCH_SIZE] for i in range(0, len(to_draft), BATCH_SIZE)]
+    return ready, batches
 
-    for start in range(0, len(to_draft), BATCH_SIZE):
-        batch = to_draft[start : start + BATCH_SIZE]
-        drafts.update(_draft_batch(batch, classifications, context))
-    return {m.id: drafts[m.id] for m in messages}
+
+def draft_batches(
+    batches: list[list[Message]],
+    classifications: dict[int, Classification],
+    context: RecruiterContext | None = None,
+    parallel: int = PARALLEL_BATCHES,
+) -> Iterator[dict[int, Draft]]:
+    """Run batches `parallel` at a time and yield each batch's drafts as soon as it finishes."""
+    if not batches:
+        return
+    with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
+        futures = [pool.submit(_draft_batch, b, classifications, context) for b in batches]
+        for future in as_completed(futures):
+            yield future.result()
 
 
 def holding_reply(message: Message) -> str:
@@ -126,7 +160,7 @@ def _draft_batch(
     classifications: dict[int, Classification],
     context: RecruiterContext | None = None,
 ) -> dict[int, Draft]:
-    _stats["batches"] += 1
+    batch_no = _bump("batches")
     expected = {m.id for m in batch}
     base_prompt = _build_prompt(batch, classifications, context)
     results: dict[int, Draft] = {}
@@ -134,14 +168,14 @@ def _draft_batch(
 
     for attempt in range(MAX_RETRIES + 1):
         if attempt > 0:
-            _stats["retries"] += 1
-            _log(f"batch {_stats['batches']}: retry {attempt}/{MAX_RETRIES}")
+            _bump("retries")
+            _log(f"batch {batch_no}: retry {attempt}/{MAX_RETRIES}")
 
         prompt = base_prompt if error is None else base_prompt + _retry_note(error)
         try:
             raw = call_llm(prompt, system=SYSTEM_PROMPT)
         except LLMUnavailable as exc:
-            _log(f"batch {_stats['batches']}: LLM unavailable, leaving drafts empty: {exc}")
+            _log(f"batch {batch_no}: LLM unavailable, leaving drafts empty: {exc}")
             break
 
         try:
@@ -166,11 +200,11 @@ def _draft_batch(
             # Safe written-out versions instead of an empty card: the approver still picks slots.
             first = _first_name(by_id[msg_id])
             results[msg_id] = Draft(id=msg_id, reply=fallback_offer(first), alt_reply=fallback_decline(first))
-            _stats["template_fallbacks"] += 1
+            _bump("template_fallbacks")
             _log(f"#{msg_id}: using the standard reschedule wording")
         else:
             results[msg_id] = Draft(id=msg_id, reply="")
-            _stats["empty_drafts"] += 1
+            _bump("empty_drafts")
             _log(f"no draft for #{msg_id}, handle manually")
 
     return results
@@ -218,7 +252,7 @@ def revise_reply(
 
     for attempt in range(MAX_RETRIES + 1):
         if attempt > 0:
-            _stats["retries"] += 1
+            _bump("retries")
             _log(f"revise #{message.id}: retry {attempt}/{MAX_RETRIES}")
 
         prompt = base_prompt if error is None else base_prompt + _retry_note(error)

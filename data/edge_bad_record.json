@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "from_name": "Good Record",
+    "from_email": "good@example.com",
+    "received_at": "2026-10-15T10:00:00+05:30",
+    "text": "Any update?"
+  },
+  {
+    "id": 2,
+    "from_name": "Missing Email",
+    "received_at": "2026-10-15T10:01:00+05:30",
+    "text": "Hello?"
+  },
+  {
+    "id": "three",
+    "from_name": "Bad Id",
+    "from_email": "badid@example.com",
+    "received_at": "yesterday",
+    "text": "Any update?"
+  }
+]

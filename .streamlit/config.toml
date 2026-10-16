@@ -1,0 +1,33 @@
+[client]
+toolbarMode = "minimal"   # hides the Deploy button and developer menu
+
+[theme]
+base = "light"
+primaryColor = "#1D4F86"
+backgroundColor = "#F4F6F9"
+secondaryBackgroundColor = "#EEF2F7"
+textColor = "#172B3D"
+borderColor = "#D6DEE7"
+linkColor = "#1D4F86"
+blueColor = "#1D4F86"
+greenColor = "#24734F"
+orangeColor = "#9A6206"
+yellowColor = "#9A6206"
+redColor = "#B42318"
+font = "Public Sans:https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap, sans-serif"
+headingFontWeights = 600
+baseFontSize = 15
+baseRadius = "6px"
+buttonRadius = "6px"
+metricValueFontSize = "1.6rem"
+metricValueFontWeight = 600
+showWidgetBorder = true
+showSidebarBorder = false
+paddingTop = "2rem"
+
+[theme.sidebar]
+backgroundColor = "#0F2742"
+secondaryBackgroundColor = "#1A3657"
+textColor = "#E6EDF5"
+primaryColor = "#3A78C2"
+borderColor = "#2C4A6E"

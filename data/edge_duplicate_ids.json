@@ -1,0 +1,16 @@
+[
+  {
+    "id": 4,
+    "from_name": "Same Id One",
+    "from_email": "sameid1@example.com",
+    "received_at": "2026-10-15T10:03:00+05:30",
+    "text": "Can we reschedule my interview?"
+  },
+  {
+    "id": 4,
+    "from_name": "Same Id Two",
+    "from_email": "sameid2@example.com",
+    "received_at": "2026-10-15T10:04:00+05:30",
+    "text": "What is the salary range?"
+  }
+]

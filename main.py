@@ -4,11 +4,12 @@ import argparse
 import json
 import os
 from collections import Counter
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import get_args
 
-from pydantic import TypeAdapter
+from pydantic import ValidationError
 
 from inbox import classify, draft, llm
 from inbox.checks import run_checks
@@ -23,8 +24,16 @@ def main() -> None:
     if args.mock:
         os.environ["LLM_PROVIDER"] = "mock"
 
-    messages = load_messages(args.input)
-    unique, duplicates = dedupe(messages)
+    loaded = load_report(args.input)
+    messages = loaded.messages
+    for r in loaded.rejected:
+        print(f"Skipped record {r['position']}: {r['reason']}")
+    for r in loaded.renumbered:
+        print(f"Id {r['old_id']} was already used by {r['kept_by']}: {r['from_email']} gets id {r['new_id']}")
+    usable, empty = split_empty(messages)
+    for m in empty:
+        print(f"Skipped #{m.id} from {m.from_email}: no text")
+    unique, duplicates = dedupe(usable)
     classifications = classify.classify(unique)
     groups = group_by_intent(unique, classifications)
     context = load_context(args.context)
@@ -34,7 +43,8 @@ def main() -> None:
     # Saved before review so a Ctrl-C during review keeps the pipeline output.
     run_dir = make_run_dir()
     save(run_dir, classifications=dump(classifications), drafts=dump(drafts),
-         flags=flags, duplicates=duplicates)
+         flags=flags, duplicates=duplicates, skipped_empty=[m.id for m in empty],
+         skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage())
 
     outbox = review(groups, drafts, flags)
     report = build_report(messages, duplicates, classifications, drafts, flags)
@@ -51,9 +61,68 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+IST = timezone(timedelta(hours=5, minutes=30))  # times without a zone are read as IST
+
+
+@dataclass
+class LoadReport:
+    """What came out of the file: messages to process, plus everything the reviewer should see."""
+    messages: list[Message] = field(default_factory=list)
+    rejected: list[dict] = field(default_factory=list)    # {position, record, reason}
+    renumbered: list[dict] = field(default_factory=list)  # {old_id, new_id, from_email, kept_by}
+    no_timezone: list[int] = field(default_factory=list)  # ids read as IST
+
+
+def load_report(path: str) -> LoadReport:
+    """Load every readable message. One bad record never blocks the rest of the file."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError("not a list")
+
+    report, valid = LoadReport(), []
+    for position, record in enumerate(data, 1):
+        try:
+            valid.append(Message.model_validate(record))
+        except ValidationError as exc:
+            report.rejected.append({"position": position, "record": record, "reason": _reason(exc)})
+
+    # Two different messages with one id: keep the first, give the later one the next free id.
+    # Replies go to the email address, so this is safe, and the note keeps it visible.
+    next_id = max((m.id for m in valid), default=0) + 1
+    owner: dict[int, str] = {}
+    for i, m in enumerate(valid):
+        if m.id in owner:
+            report.renumbered.append({"old_id": m.id, "new_id": next_id, "from_email": m.from_email,
+                                      "kept_by": owner[m.id]})
+            m = valid[i] = m.model_copy(update={"id": next_id})
+            next_id += 1
+        owner[m.id] = m.from_email
+        if m.received_at.tzinfo is None:
+            valid[i] = m.model_copy(update={"received_at": m.received_at.replace(tzinfo=IST)})
+            report.no_timezone.append(m.id)
+
+    report.messages = valid
+    return report
+
+
+def _reason(exc: ValidationError) -> str:
+    parts = []
+    for err in exc.errors():
+        field_name = ".".join(str(p) for p in err["loc"]) or "record"
+        parts.append(f"{field_name}: {err['msg']}")
+    return "; ".join(parts)
+
+
 def load_messages(path: str) -> list[Message]:
-    raw = Path(path).read_text(encoding="utf-8")
-    return TypeAdapter(list[Message]).validate_json(raw)
+    return load_report(path).messages
+
+
+def split_empty(messages: list[Message]) -> tuple[list[Message], list[Message]]:
+    """Messages with no text are skipped before any AI call: there's nothing to sort or answer.
+    They're returned separately so the recruiter still sees they arrived."""
+    kept = [m for m in messages if m.text.strip()]
+    empty = [m for m in messages if not m.text.strip()]
+    return kept, empty
 
 
 def group_by_intent(
@@ -105,6 +174,8 @@ def build_report(messages, duplicates, classifications, drafts, flags) -> dict:
         },
         "provider_fallbacks": llm_stats["fallbacks"],
         "providers_used": llm_stats["provider_used"],
+        "ai_usage": llm.usage_summary(),
+        "batching": {"batch_size": draft.BATCH_SIZE, "parallel": draft.PARALLEL_BATCHES},
     }
 
 
@@ -128,6 +199,9 @@ def print_summary(report: dict, run_dir: Path) -> None:
     print(f"\nMessages: {report['total_messages']}  duplicates: {report['duplicates_found']}  "
           f"needs_human: {report['needs_human']}  empty drafts: {report['empty_drafts']}")
     print(f"Flags: {report['flagged_by_type'] or 'none'}  fallbacks: {report['provider_fallbacks']}")
+    u = report["ai_usage"]
+    print(f"AI: {u['calls']} calls, {u['input_tokens']} tokens in, {u['output_tokens']} out, "
+          f"{u['thinking_tokens']} thinking, slowest call {u['slowest_call_seconds']}s")
     print(f"Run saved to {run_dir}")
 
 

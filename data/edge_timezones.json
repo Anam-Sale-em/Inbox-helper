@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "from_name": "Has Timezone",
+    "from_email": "tz1@example.com",
+    "received_at": "2026-10-15T10:00:00+05:30",
+    "text": "Any update on my application?"
+  },
+  {
+    "id": 2,
+    "from_name": "No Timezone",
+    "from_email": "tz2@example.com",
+    "received_at": "2026-10-15T10:05:00",
+    "text": "Can we move my interview to Friday?"
+  }
+]

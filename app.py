@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 import streamlit as st
 from pydantic import ValidationError
 
-from inbox import classify, draft
+from inbox import classify, draft, llm
 import re
 
 from inbox.checks import FIXED_FLAGS, run_checks, unlisted_times
@@ -27,8 +27,9 @@ from difflib import SequenceMatcher
 from inbox.dedupe import NEAR_DUPLICATE_RATIO, dedupe, normalize
 from inbox.feedback import feedback_problem
 from inbox.llm import MockResponseMissing
-from inbox.schema import Message
-from main import check_drafts, group_by_intent, load_messages, make_run_dir, other_names, save
+from inbox.schema import Draft, Message
+from main import (load_report, split_empty, group_by_intent, make_run_dir,
+                  other_names, save)
 
 DATA_DIR = Path("data")
 SUBJECT = "Re: your application"
@@ -62,33 +63,61 @@ FLAG_LABELS = {
 }
 STATUS_CLASS = {"Pending": "pending", "Approved": "approved", "On hold": "hold"}
 
+SHIELD = ('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+          'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+          '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>')
+HEADER = (
+    '<div class="ih-top"><div>'
+    '<div class="ih-title">Inbox Helper</div>'
+    '<div class="ih-sub">Candidate messages sorted and drafted by AI. You approve every reply.</div>'
+    f'</div><div class="ih-safe">{SHIELD}Nothing is sent automatically</div></div>'
+)
+
 CSS = """
 <style>
+/* Palette: navy = trust/primary, green = approved, amber = on hold, red = needs a look. */
+:root {--ih-ink:#172B3D; --ih-muted:#5B6B7C; --ih-line:#D6DEE7; --ih-page:#F4F6F9; --ih-navy:#1D4F86;
+       --ih-green:#24734F; --ih-amber:#9A6206; --ih-red:#B42318;}
+
+.ih-top {display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap;
+         padding:4px 0 18px; margin-bottom:8px; border-bottom:1px solid var(--ih-line);}
+.ih-title {font-size:1.75rem; font-weight:700; letter-spacing:-.01em; color:var(--ih-ink); line-height:1.2;}
+.ih-sub {color:var(--ih-muted); margin-top:4px;}
+.ih-safe {display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--ih-green);
+          background:#EAF4EE; border:1px solid #BFDCCB; padding:6px 12px; border-radius:6px;}
+.ih-safe svg {flex:none;}
+
+/* White surfaces for the things you act on. */
+.st-key-metrics, [class*="st-key-card_"] {background:#FFFFFF;}
+[class*="st-key-card_"] {border-left-width:4px !important; border-left-style:solid !important;}
+[class*="st-key-card_pending"]  {border-left-color:#9AA8B6 !important;}
+[class*="st-key-card_approved"] {border-left-color:var(--ih-green) !important;}
+[class*="st-key-card_hold"]     {border-left-color:var(--ih-amber) !important;}
+
 .ih-head {display:flex; justify-content:space-between; align-items:flex-start; gap:12px;}
-.ih-name {font-weight:600; font-size:1.02rem;}
-.ih-meta {opacity:.65; font-size:.85rem; margin-top:2px;}
-.ih-chip {font-size:.75rem; font-weight:600; padding:3px 10px; border-radius:999px;
-          white-space:nowrap; border:1px solid transparent;}
-.ih-chip.pending  {color:#8a8f98; background:rgba(138,143,152,.12); border-color:rgba(138,143,152,.35);}
-.ih-chip.approved {color:#2f9e5b; background:rgba(47,158,91,.12);  border-color:rgba(47,158,91,.4);}
-.ih-chip.hold     {color:#b7791f; background:rgba(214,158,46,.14); border-color:rgba(214,158,46,.45);}
-.ih-msg {white-space:pre-wrap; padding:10px 14px; margin:10px 0 6px; border-radius:6px;
-         background:rgba(128,128,128,.08); border-left:3px solid rgba(128,128,128,.35);}
-.ih-flag {display:inline-block; font-size:.75rem; font-weight:600; padding:2px 8px; margin:2px 6px 2px 0;
-          border-radius:4px; color:#e5484d; background:rgba(229,72,77,.1); border:1px solid rgba(229,72,77,.35);}
-.ih-note {display:inline-block; font-size:.75rem; padding:2px 8px; margin:2px 6px 2px 0; border-radius:4px;
-          opacity:.75; border:1px dashed rgba(128,128,128,.5);}
-.ih-rev {display:inline-block; font-size:.75rem; font-weight:600; padding:2px 8px; margin:2px 6px 2px 0;
-         border-radius:4px; color:#3b82f6; background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.35);}
+.ih-name {font-weight:600; font-size:1.05rem; color:var(--ih-ink);}
+.ih-meta {color:var(--ih-muted); font-size:.85rem; margin-top:2px; display:flex; gap:14px; flex-wrap:wrap;}
+.ih-chip {font-size:.78rem; font-weight:600; padding:3px 10px; border-radius:999px; white-space:nowrap;}
+.ih-chip.pending  {color:#44546A; background:#EEF2F6;}
+.ih-chip.approved {color:#FFFFFF; background:var(--ih-green);}
+.ih-chip.hold     {color:var(--ih-amber); background:#FDF3E1;}
+.ih-msg {white-space:pre-wrap; padding:12px 16px; margin:12px 0 8px; border-radius:6px; line-height:1.55;
+         color:var(--ih-ink); background:var(--ih-page); border-left:3px solid #9FB3C8;
+         max-height:240px; overflow-y:auto;}
+.ih-flag {display:inline-block; font-size:.78rem; font-weight:600; padding:3px 9px; margin:2px 6px 2px 0;
+          border-radius:4px; color:var(--ih-red); background:#FEF3F2; border:1px solid #FECDCA; cursor:help;}
+.ih-note {display:inline-block; font-size:.78rem; padding:3px 9px; margin:2px 6px 2px 0; border-radius:4px;
+          color:var(--ih-muted); background:var(--ih-page); border:1px solid var(--ih-line);}
+.ih-rev {display:inline-block; font-size:.78rem; font-weight:600; padding:3px 9px; margin:2px 6px 2px 0;
+         border-radius:4px; color:var(--ih-navy); background:#EAF1F9; border:1px solid #C5D7EC;}
 </style>
 """
 
 
 def main() -> None:
-    st.set_page_config(page_title="Inbox Helper", page_icon="📥", layout="wide")
+    st.set_page_config(page_title="Inbox Helper", page_icon=":material/inbox:", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title("Inbox Helper")
-    st.caption("Sort candidate messages, draft replies, approve before sending")
+    st.markdown(HEADER, unsafe_allow_html=True)
 
     state = st.session_state
     state.setdefault("decisions", {})
@@ -108,13 +137,52 @@ def main() -> None:
         return
 
     for message in result["unique"]:
-        ensure_card_state(message, result)
+        if message.id in result["drafts"]:  # still-drafting messages get their card next wave
+            ensure_card_state(message, result)
     refresh_flags(result)  # flags always match what's in the reply boxes right now
 
+    drafting_banner(result)
     metrics(result)
     intent_tabs(result)
     st.divider()
     outbox_section(result)
+
+    # Everything above is already on screen, so finished cards can be reviewed while the
+    # next wave drafts. Then rerun to show the new cards.
+    if result["pending"]:
+        draft_next_wave(result)
+        st.rerun()
+
+
+def drafting_banner(result: dict) -> None:
+    if st.session_state.get("draft_error"):
+        st.error(st.session_state.draft_error)
+    if not result["pending"]:
+        return
+    total = result["to_draft"]
+    done = total - sum(len(b) for b in result["pending"])
+    st.progress(done / total if total else 1.0,
+                text=f"Drafting replies: {done} of {total} ready. You can start reviewing these now.")
+
+
+def draft_next_wave(result: dict) -> None:
+    """Draft the next few batches in parallel and store them. Never raises: on failure the
+    remaining messages get an empty draft (written by hand or put on hold) and an error shows."""
+    state = st.session_state
+    wave = result["pending"][:draft.PARALLEL_BATCHES]
+    result["pending"] = result["pending"][draft.PARALLEL_BATCHES:]
+    try:
+        with provider_env(result["mock"]):
+            for done in draft.draft_batches(wave, result["classifications"], result["context"]):
+                result["drafts"].update(done)
+    except Exception as exc:
+        traceback.print_exc()
+        state.draft_error = friendly_error(exc, result["source"], result["mock"])
+        for batch in wave + result["pending"]:
+            for m in batch:
+                result["drafts"].setdefault(m.id, Draft(id=m.id, reply=""))
+        result["pending"] = []
+    result["usage"] = llm.get_usage()
 
 
 # --- sidebar ---------------------------------------------------------------------
@@ -123,7 +191,7 @@ def main() -> None:
 def sidebar() -> None:
     state = st.session_state
     with st.sidebar:
-        st.header("Run")
+        st.subheader("New run")
         files = sorted(str(p) for p in DATA_DIR.glob("*.json"))
         if not files:
             st.warning(f"No message files found. Add a .json file to `{DATA_DIR}/` to get started.")
@@ -135,7 +203,7 @@ def sidebar() -> None:
                          help="Replay recorded model responses instead of calling Gemini/Groq.")
 
         if st.button("Run pipeline", type="primary", width="stretch"):
-            with st.spinner("Removing duplicates, sorting and drafting replies…"):
+            with st.spinner("Removing duplicates and sorting messages…"):
                 try:
                     state.result = run_pipeline(path, mock)
                     state.decisions = {}
@@ -148,6 +216,7 @@ def sidebar() -> None:
                     state.kind_text = {}
                     state.run_no += 1
                     state.pop("last_saved", None)
+                    state.pop("draft_error", None)
                 except Exception as exc:
                     traceback.print_exc()  # full detail in the terminal, friendly text in the UI
                     st.error(friendly_error(exc, path, mock))
@@ -156,9 +225,24 @@ def sidebar() -> None:
             st.divider()
             st.subheader("Progress")
             counts = decision_counts(state.result)
-            st.markdown(f"**{counts['Approved']}** approved · **{counts['On hold']}** on hold · "
-                        f"**{counts['Pending']}** pending")
+            total = sum(counts.values())
+            st.progress(counts["Approved"] / total if total else 0.0,
+                        text=f"{counts['Approved']} of {total} approved")
+            st.markdown(f"{counts['On hold']} on hold, {counts['Pending']} waiting for review")
             st.caption(f"Source: {state.result['source']}")
+            usage_panel(state.result)
+
+
+def usage_panel(result: dict) -> None:
+    u = llm.usage_summary(result.get("usage", []))
+    st.subheader("AI usage")
+    if result["mock"]:
+        st.caption(f"{u['calls']} replayed calls (mock mode: no tokens spent)")
+        return
+    st.markdown(f"{u['calls']} calls, slowest {u['slowest_call_seconds']}s")
+    st.caption(f"Tokens: {u['input_tokens']:,} in, {u['output_tokens']:,} out, "
+               f"{u['thinking_tokens']:,} thinking. Batches of {draft.BATCH_SIZE}, "
+               f"{draft.PARALLEL_BATCHES} at a time.")
 
 
 @contextmanager
@@ -178,22 +262,34 @@ def provider_env(mock: bool):
 
 def run_pipeline(path: str, mock: bool) -> dict:
     with provider_env(mock):
-        messages = load_messages(path)
-        if not messages:
+        loaded = load_report(path)
+        messages = loaded.messages
+        if not messages and not loaded.rejected:
             raise ValueError("empty input")
-        unique, duplicates = dedupe(messages)
+        usable, empty = split_empty(messages)  # no text = nothing to sort or answer, no AI call
+        llm.reset_usage()
+        # Duplicates are removed from the whole file first; batching only starts after this.
+        unique, duplicates = dedupe(usable)
         classifications = classify.classify(unique)
         context = load_context()  # status/salary facts from config, if present
-        drafts = draft.draft_replies(unique, classifications, context)
-        flags = check_drafts(unique, drafts, [])
+        # Holding replies are ready now; the rest is drafted in waves (see draft_next_wave).
+        drafts, pending = draft.plan_drafts(unique, classifications)
     return {
         "source": path,
         "unique": unique,
         "messages": messages,
         "duplicates": duplicates,
+        "empty": empty,
+        "rejected": loaded.rejected,
+        "renumbered": {r["new_id"]: r for r in loaded.renumbered},
+        "no_timezone": loaded.no_timezone,
         "classifications": classifications,
         "drafts": drafts,
-        "flags": flags,
+        "flags": {},  # filled by refresh_flags as cards appear
+        "pending": pending,
+        "to_draft": sum(len(b) for b in pending),
+        "mock": mock,
+        "usage": llm.get_usage(),
         "context": context,
         "groups": group_by_intent(unique, classifications),
     }
@@ -208,6 +304,10 @@ def friendly_error(exc: Exception, path: str, mock: bool) -> str:
         return (f"`{path}` isn't a valid message list ({exc.error_count()} problem(s)). "
                 f"First one: **{where}**: {first['msg']}. Each message needs id, from_name, "
                 "from_email, received_at and text.")
+    if isinstance(exc, json.JSONDecodeError):
+        return f"`{path}` isn't valid JSON (line {exc.lineno}): {exc.msg}. Fix the file and run again."
+    if isinstance(exc, ValueError) and str(exc) == "not a list":
+        return f"`{path}` should be a list of messages: [ {{...}}, {{...}} ]."
     if isinstance(exc, MockResponseMissing):
         return ("Mock mode has no recorded response for this input. Turn mock mode off and run once "
                 "with `RECORD=1` set, or pick a file you've already recorded.")
@@ -234,8 +334,44 @@ def empty_state() -> None:
 
 def metrics(result: dict) -> None:
     intents = [c.intent for c in result["classifications"].values()]
+    with st.container(border=True, key="metrics"):
+        metric_row(result, intents)
+    rejected_panel(result)
+    duplicates_panel(result)
+    empty_panel(result)
+
+
+def rejected_panel(result: dict) -> None:
+    """Records that couldn't be read: shown as proof, never drafted. The rest of the file still runs."""
+    rejected = result.get("rejected", [])
+    if not rejected:
+        return
+    with st.expander(f"Show {len(rejected)} record(s) that couldn't be read", expanded=True):
+        st.caption("These were skipped, so no reply was drafted. Every other message in the file was "
+                   "processed as normal. Fix the record in the file to include it next run.")
+        for r in rejected:
+            with st.container(border=True):
+                st.markdown(f"**Record {r['position']} in the file** · {html.escape(r['reason'])}")
+                st.code(json.dumps(r["record"], indent=2, ensure_ascii=False), language="json")
+
+
+def empty_panel(result: dict) -> None:
+    empty = result.get("empty", [])
+    if not empty:
+        return
+    with st.expander(f"Show {len(empty)} empty message(s) skipped"):
+        st.caption("These arrived with no text, so there was nothing to sort or reply to. "
+                   "No AI call was made for them.")
+        for m in empty:
+            st.markdown(f"#{m.id} · **{html.escape(m.from_name) or '(no name)'}** · "
+                        f"`{html.escape(m.from_email)}` · {m.received_at.strftime('%d %b %Y, %H:%M')}")
+
+
+def metric_row(result: dict, intents: list[str]) -> None:
     cols = st.columns(6)
-    cols[0].metric("Messages", len(result["messages"]))
+    cols[0].metric("Messages", len(result["messages"]) + len(result.get("rejected", [])),
+                   help="Total messages in the file. Copies, empty messages and broken records don't get "
+                        "a card; they're listed below with the reason.")
     cols[1].metric("Duplicates removed", len(result["duplicates"]))
     cols[2].metric("Categories", len(result["groups"]))
     cols[3].metric("Flagged drafts", len(result["flags"]),
@@ -244,6 +380,8 @@ def metrics(result: dict) -> None:
     cols[4].metric("Needs human", intents.count("needs_human"))
     cols[5].metric("On hold", decision_counts(result)["On hold"])
 
+
+def duplicates_panel(result: dict) -> None:
     if result["duplicates"]:
         with st.expander(f"Show {len(result['duplicates'])} removed duplicate(s)"):
             by_id = {m.id: m for m in result["messages"]}
@@ -282,7 +420,7 @@ def ordered_groups(result: dict) -> list[tuple[str, list[Message]]]:
 def intent_tabs(result: dict) -> None:
     groups = ordered_groups(result)
     if not groups:
-        st.info("Every message was a duplicate, so there's nothing to review.")
+        st.info("Nothing to review: every message was a duplicate, empty, or couldn't be read. See above for why.")
         return
 
     # Held messages leave their category tab and wait in "On hold" (last, so other tabs don't shift).
@@ -298,13 +436,22 @@ def intent_tabs(result: dict) -> None:
     for tab, (_, messages) in zip(tabs, active):
         with tab:
             for message in messages:
-                card(message, result)
+                if message.id in result["drafts"]:
+                    card(message, result)
+                else:
+                    drafting_card(message)
 
     with tabs[-1]:
         if not held:
             st.caption("Nothing on hold. Use Hold on any message that needs a human to handle it later.")
         for message in held:
             card(message, result, show_intent=True)
+
+
+def drafting_card(message: Message) -> None:
+    with st.container(border=True, key=f"card_pending_wait_{st.session_state.run_no}_{message.id}"):
+        st.markdown(f'<div class="ih-name">{html.escape(message.from_name) or "(no name)"}</div>'
+                    '<div class="ih-meta"><span>Drafting reply…</span></div>', unsafe_allow_html=True)
 
 
 def card(message: Message, result: dict, show_intent: bool = False) -> None:
@@ -316,7 +463,8 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
 
     key = text_key(message.id)  # seeded by ensure_card_state before anything renders
 
-    with st.container(border=True):
+    # The key puts the status in the card's CSS class, which colours its left edge.
+    with st.container(border=True, key=f"card_{STATUS_CLASS[status]}_{run_no}_{message.id}"):
         st.markdown(card_header(message, status), unsafe_allow_html=True)
 
         flags = result["flags"].get(message.id, [])
@@ -325,6 +473,13 @@ def card(message: Message, result: dict, show_intent: bool = False) -> None:
         if show_intent:
             intent = result["classifications"][message.id].intent
             labels = f'<span class="ih-note">{html.escape(INTENT_LABELS.get(intent, intent))}</span>' + labels
+        moved = result.get("renumbered", {}).get(message.id)
+        if moved:
+            labels += (f'<span class="ih-note" title="Id {moved["old_id"]} was already used by '
+                       f'{html.escape(moved["kept_by"], quote=True)}. The reply still goes to this sender.">'
+                       f'Id changed from {moved["old_id"]} (already used)</span>')
+        if message.id in result.get("no_timezone", []):
+            labels += '<span class="ih-note">No timezone in the file, read as IST</span>'
         if history:
             labels += f'<span class="ih-rev">Revision {len(history)}</span>'
         if not original.strip() and not history:
@@ -449,7 +604,7 @@ def card_header(message: Message, status: str) -> str:
     return (
         '<div class="ih-head"><div>'
         f'<div class="ih-name">{html.escape(message.from_name)}</div>'
-        f'<div class="ih-meta">{html.escape(message.from_email)} · {received}</div>'
+        f'<div class="ih-meta"><span>{html.escape(message.from_email)}</span><span>{received}</span></div>'
         f'</div><span class="ih-chip {STATUS_CLASS[status]}">{status}</span></div>'
         f'<div class="ih-msg">{html.escape(message.text)}</div>'
     )
