@@ -32,11 +32,14 @@ def main() -> None:
     drafts = int_keys(load_json(run_dir / "drafts.json"))
     flags = int_keys(load_json(run_dir / "flags.json"))
     duplicates = {int(k): v for k, v in load_json(run_dir / "duplicates.json").items()}
+    # Skipped before the AI on purpose (Day 3/4): empty, auto-reply/bounce, unreadable.
+    skipped = {int(k): v for k, v in optional_json(run_dir / "skipped_no_reply.json", {}).items()}
+    skipped.update({int(i): "empty" for i in optional_json(run_dir / "skipped_empty.json", [])})
 
     print(f"{LINE}\nDay 1 eval for {run_dir}\n{LINE}")
     result = {
         "run": str(run_dir),
-        "intent": intent_section(expected, messages, classifications, duplicates),
+        "intent": intent_section(expected, messages, classifications, duplicates, skipped),
         "duplicates": duplicate_section(expected, duplicates),
         "attacks": attack_section(expected, classifications, drafts, flags),
     }
@@ -49,11 +52,20 @@ def main() -> None:
 # --- sections ----------------------------------------------------------------
 
 
-def intent_section(expected, messages, classifications, duplicates) -> dict:
+def intent_section(expected, messages, classifications, duplicates, skipped=None) -> dict:
+    skipped = skipped or {}
     scored = [i for i, e in expected.items() if e.get("duplicate_of") is None]
     mismatches = []
     for msg_id in scored:
         want = expected[msg_id]["intent"]
+        if msg_id in skipped:
+            # A message that needs no reply counts as right when it was skipped for that reason.
+            if expected[msg_id].get("no_reply"):
+                continue
+            want, got = want, f"(skipped: {skipped[msg_id]})"
+            mismatches.append({"id": msg_id, "expected": want, "got": got,
+                               "text": snippet(messages.get(msg_id, {}).get("text", ""))})
+            continue
         got = classifications.get(msg_id, {}).get("intent")
         if got is None:
             got = "(deduped)" if msg_id in duplicates else "(missing)"
@@ -143,6 +155,10 @@ def load_json(path: Path):
     if not path.exists():
         sys.exit(f"Missing file: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def optional_json(path: Path, default):
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
 
 
 def by_id(data) -> dict[int, dict]:

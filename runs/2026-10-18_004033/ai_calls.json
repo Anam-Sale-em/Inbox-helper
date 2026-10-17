@@ -1,0 +1,79 @@
+[
+  {
+    "provider": "gemini",
+    "seconds": 10.28,
+    "input_tokens": 2337,
+    "output_tokens": 2217,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.04,
+    "input_tokens": 804,
+    "output_tokens": 275,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.14,
+    "input_tokens": 843,
+    "output_tokens": 316,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.32,
+    "input_tokens": 815,
+    "output_tokens": 345,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 1.88,
+    "input_tokens": 849,
+    "output_tokens": 265,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.41,
+    "input_tokens": 780,
+    "output_tokens": 325,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 1.93,
+    "input_tokens": 814,
+    "output_tokens": 270,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 3.17,
+    "input_tokens": 832,
+    "output_tokens": 300,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 8.99,
+    "input_tokens": 790,
+    "output_tokens": 327,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "groq",
+    "seconds": 3.4,
+    "input_tokens": 867,
+    "output_tokens": 388,
+    "thinking_tokens": 155
+  },
+  {
+    "provider": "groq",
+    "seconds": 3.2,
+    "input_tokens": 889,
+    "output_tokens": 290,
+    "thinking_tokens": 84
+  }
+]

@@ -3,6 +3,7 @@
 import html
 import re
 import sys
+import unicodedata
 from typing import Any
 
 from pydantic import ValidationError
@@ -35,18 +36,47 @@ Return exactly one item for every input id: no missing, extra or repeated ids.""
 
 # Code-side backstop for the prompt rule: obvious attempts to instruct the AI.
 # A match forces needs_human and keeps the text out of the classify call entirely.
+# Patterns describe kinds of attack, not exact phrases (Day 4). Text is normalised first so
+# invisible characters, full-width letters and look-alike Cyrillic/Greek letters can't hide them.
+_OVERRIDE = r"(?:ignore|disregard|forget|override|bypass|overlook)"
+_AI = r"(?:ai|assistant|bot|chatbot|model|llm|gpt)"
 INJECTION_PATTERNS = [
-    re.compile(
-        r"\b(?:ignore|disregard|forget|override|bypass)\b.{0,30}?"
-        r"\b(?:rules?|instructions?|prompts?|guidelines?|policy|policies)\b",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    re.compile(r"\bSYSTEM\s*:"),                                         # "SYSTEM:" in caps
-    re.compile(r"(?im)^\s*(?:system|assistant|developer)\s*:"),           # role line at line start
+    re.compile(_OVERRIDE + r"\b.{0,30}?\b(?:rules?|instructions?|prompts?|guidelines?|policy|policies)\b",
+               re.IGNORECASE | re.DOTALL),
+    re.compile(r"\b" + _OVERRIDE + r"\b\W+(?:\w+\W+){0,2}?(?:everything|all|anything)\b\W+(?:\w+\W+){0,3}?"
+               r"(?:above|before|previous|prior|earlier|said|told)\b", re.IGNORECASE),
+    re.compile(r"\bSYSTEM\s*:"),                                          # "SYSTEM:" in caps
+    re.compile(r"(?im)^\s*(?:p\.?\s*s\.?\s*)?(?:system|developer|" + _AI[3:-1] + r")\s*:"),  # role label
     re.compile(r"\b(?:reply|respond|answer|say|output)\s+only\s+with\b", re.IGNORECASE),
-    re.compile(r"\b(?:from now on|you are now|act as (?:an? )?(?:ai|assistant|bot))\b", re.IGNORECASE),
+    re.compile(r"\b(?:from now on|you are now|you are no longer|let'?s play a game|role-?play)\b", re.IGNORECASE),
+    re.compile(r"\b(?:pretend|imagine)\s+(?:that\s+)?you(?:'re|\s+are)\b", re.IGNORECASE),
+    re.compile(r"\bact\s+as\s+(?:an?\s+|my\s+|the\s+)?(?:ai|assistant|bot|recruiter|hiring manager|hr)\b",
+               re.IGNORECASE),
+    re.compile(r"\b(?:note|message|instruction|request)s?\s+(?:to|for)\s+(?:the\s+)?" + _AI + r"\b", re.IGNORECASE),
+    re.compile(r"\b(?:dear|hey|hi|hello)\s+" + _AI + r"\b", re.IGNORECASE),
+    re.compile(r"\[\s*(?:internal|admin|system|recruiter|hr)\b[^\]]{0,25}\bnote\b|\[\s*(?:system|admin)\s*[:\]]",
+               re.IGNORECASE),                                            # fake internal note
+    re.compile(r"<\|[^|>]{1,30}\|>"),                                     # model control tokens
+    re.compile(r"(?im)^\s*#{2,}\s*(?:new\s+)?(?:task|instructions?|system)\b"),
+    re.compile(r'\{\s*"(?:id|intent|reply|alt_reply)"\s*:'),             # ready-made JSON answer
     re.compile(r"</?\s*message\b", re.IGNORECASE),                       # delimiter breakout
 ]
+
+# Look-alike letters mapped to Latin, for detection only (the message itself is never changed).
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j",
+    "А": "A", "В": "B", "Е": "E", "І": "I", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P",
+    "С": "C", "Т": "T", "Х": "X", "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v",
+    "ρ": "p", "τ": "t", "υ": "u", "Ο": "O", "Ι": "I", "Α": "A", "Ε": "E",
+})
+
+
+def normalise_for_checks(text: str) -> str:
+    """NFKC (full-width → normal), drop invisible format characters, map look-alike letters."""
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return text.translate(_CONFUSABLES)
+
 
 _stats: dict[str, Any] = {"retries": 0, "injections_blocked": 0}
 
@@ -61,7 +91,8 @@ def reset_stats() -> None:
 
 
 def looks_like_injection(text: str) -> bool:
-    return any(pattern.search(text) for pattern in INJECTION_PATTERNS)
+    clean = normalise_for_checks(text)
+    return any(pattern.search(clean) for pattern in INJECTION_PATTERNS)
 
 
 def classify(messages: list[Message]) -> dict[int, Classification]:

@@ -3,18 +3,18 @@
 import argparse
 import json
 import os
+import re
 from collections import Counter
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import get_args
 
-from pydantic import ValidationError
 
 from inbox import classify, draft, llm
 from inbox.checks import run_checks
 from inbox.context import DEFAULT_PATH, load_context
 from inbox.dedupe import dedupe
+from inbox.intake import LoadReport, load_file
 from inbox.review import review
 from inbox.schema import Classification, Draft, Intent, Message
 
@@ -33,6 +33,9 @@ def main() -> None:
     usable, empty = split_empty(messages)
     for m in empty:
         print(f"Skipped #{m.id} from {m.from_email}: no text")
+    usable, no_reply = split_no_reply(usable)
+    for msg_id, reason in no_reply.items():
+        print(f"No reply needed for #{msg_id}: {reason}")
     unique, duplicates = dedupe(usable)
     classifications = classify.classify(unique)
     groups = group_by_intent(unique, classifications)
@@ -44,6 +47,7 @@ def main() -> None:
     run_dir = make_run_dir()
     save(run_dir, classifications=dump(classifications), drafts=dump(drafts),
          flags=flags, duplicates=duplicates, skipped_empty=[m.id for m in empty],
+         skipped_no_reply=no_reply,
          skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage())
 
     outbox = review(groups, drafts, flags)
@@ -61,56 +65,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-IST = timezone(timedelta(hours=5, minutes=30))  # times without a zone are read as IST
-
-
-@dataclass
-class LoadReport:
-    """What came out of the file: messages to process, plus everything the reviewer should see."""
-    messages: list[Message] = field(default_factory=list)
-    rejected: list[dict] = field(default_factory=list)    # {position, record, reason}
-    renumbered: list[dict] = field(default_factory=list)  # {old_id, new_id, from_email, kept_by}
-    no_timezone: list[int] = field(default_factory=list)  # ids read as IST
-
-
 def load_report(path: str) -> LoadReport:
-    """Load every readable message. One bad record never blocks the rest of the file."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(data, list):
-        raise ValueError("not a list")
-
-    report, valid = LoadReport(), []
-    for position, record in enumerate(data, 1):
-        try:
-            valid.append(Message.model_validate(record))
-        except ValidationError as exc:
-            report.rejected.append({"position": position, "record": record, "reason": _reason(exc)})
-
-    # Two different messages with one id: keep the first, give the later one the next free id.
-    # Replies go to the email address, so this is safe, and the note keeps it visible.
-    next_id = max((m.id for m in valid), default=0) + 1
-    owner: dict[int, str] = {}
-    for i, m in enumerate(valid):
-        if m.id in owner:
-            report.renumbered.append({"old_id": m.id, "new_id": next_id, "from_email": m.from_email,
-                                      "kept_by": owner[m.id]})
-            m = valid[i] = m.model_copy(update={"id": next_id})
-            next_id += 1
-        owner[m.id] = m.from_email
-        if m.received_at.tzinfo is None:
-            valid[i] = m.model_copy(update={"received_at": m.received_at.replace(tzinfo=IST)})
-            report.no_timezone.append(m.id)
-
-    report.messages = valid
-    return report
-
-
-def _reason(exc: ValidationError) -> str:
-    parts = []
-    for err in exc.errors():
-        field_name = ".".join(str(p) for p in err["loc"]) or "record"
-        parts.append(f"{field_name}: {err['msg']}")
-    return "; ".join(parts)
+    """Load every readable message from a JSON file. See inbox/intake.py for the rules."""
+    return load_file(path)
 
 
 def load_messages(path: str) -> list[Message]:
@@ -123,6 +80,32 @@ def split_empty(messages: list[Message]) -> tuple[list[Message], list[Message]]:
     kept = [m for m in messages if m.text.strip()]
     empty = [m for m in messages if not m.text.strip()]
     return kept, empty
+
+
+_NO_REPLY_SENDER = re.compile(r"^(?:mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounces?)@", re.I)
+_AUTO_TEXT = re.compile(
+    r"^\s*(?:automatic reply|auto[- ]?reply|autoreply|out of (?:the )?office\s*:|"
+    r"delivery status notification|undeliverable\s*:|mail delivery failed)", re.I)
+
+
+def no_reply_reason(message: Message) -> str | None:
+    """Auto-replies and bounces: nobody is waiting for an answer, so no AI call and no draft."""
+    if _NO_REPLY_SENDER.match(message.from_email.strip()):
+        return "Sent from an address that doesn't take replies"
+    if _AUTO_TEXT.match(message.text):
+        return "Automatic reply or bounce"
+    return None
+
+
+def split_no_reply(messages: list[Message]) -> tuple[list[Message], dict[int, str]]:
+    kept, skipped = [], {}
+    for m in messages:
+        reason = no_reply_reason(m)
+        if reason:
+            skipped[m.id] = reason
+        else:
+            kept.append(m)
+    return kept, skipped
 
 
 def group_by_intent(

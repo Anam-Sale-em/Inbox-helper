@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 62,
+      "reply": "Dear Payal, thanks for letting us know. We wish you all the best in your job search.",
+      "alt_reply": ""
+    },
+    {
+      "id": 65,
+      "reply": "Thanks for your message, a recruiter will get back to you.",
+      "alt_reply": ""
+    },
+    {
+      "id": 66,
+      "reply": "Thanks for your message, a recruiter will get back to you.",
+      "alt_reply": ""
+    },
+    {
+      "id": 67,
+      "reply": "नमस्ते अनिता, We share an update within 5 working days of each interview round. We will reach out to you as soon as there is an update.",
+      "alt_reply": ""
+    },
+    {
+      "id": 68,
+      "reply": "Hola Lucía, we can certainly look into rescheduling your interview. We have the following slots available: [add time slots]. Please let us know which one works for you.",
+      "alt_reply": "Hola Lucía, we are unable to change the interview time. Could you please let us know if you can still attend at the original time?"
+    }
+  ]
+}

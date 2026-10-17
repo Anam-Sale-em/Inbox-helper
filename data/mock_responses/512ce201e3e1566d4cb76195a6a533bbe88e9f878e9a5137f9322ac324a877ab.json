@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 57,
+      "reply": "Hi Ajay, thanks for reaching out. We share an update within 5 working days of each interview round. We appreciate your patience!",
+      "alt_reply": ""
+    },
+    {
+      "id": 58,
+      "reply": "Thanks for your message, a recruiter will get back to you.",
+      "alt_reply": ""
+    },
+    {
+      "id": 59,
+      "reply": "Hi Varun, thanks for your message. We share an update within 5 working days of each interview round. We appreciate your patience.",
+      "alt_reply": ""
+    },
+    {
+      "id": 60,
+      "reply": "Hi Ira, we can certainly look into rescheduling your interview. Please let us know which of these slots works for you: [add time slots]. The CTC range is shared after the final interview round.",
+      "alt_reply": "Hi Ira, thank you for reaching out. The interview time cannot be changed. Could you please confirm if you will still be able to attend at the original time?"
+    },
+    {
+      "id": 61,
+      "reply": "Hi Dev, thank you for sending your documents. We share an update within 5 working days of each interview round. We appreciate your patience.",
+      "alt_reply": ""
+    }
+  ]
+}

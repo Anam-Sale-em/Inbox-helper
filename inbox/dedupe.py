@@ -8,6 +8,13 @@ from inbox.schema import Message
 NEAR_DUPLICATE_RATIO = 0.9
 
 _PUNCTUATION = re.compile(r"[^\w\s]")
+# Words that change what a request means: "move it to Friday" vs "to Monday" are different asks
+# even at 95% similar text (found Day 3: Arjun's two messages were merged).
+_WHEN_WORDS = re.compile(
+    r"\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:mon|tue|wed|thu|fri|sat|sun)\b"
+    r"|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b"
+    r"|\b(?:today|tomorrow|tonight|morning|afternoon|evening|noon|midnight|am|pm|next|week|month)\b"
+    r"|\d+")
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -55,6 +62,13 @@ def _find_near(text: str, candidates: list[tuple[int, str]]) -> int | None:
             matcher.real_quick_ratio() >= NEAR_DUPLICATE_RATIO
             and matcher.quick_ratio() >= NEAR_DUPLICATE_RATIO
             and matcher.ratio() >= NEAR_DUPLICATE_RATIO
+            and _when(original_text) == _when(text)
         ):
             return original_id
     return None
+
+
+def _when(text: str) -> set[str]:
+    """Days, dates, times and numbers in a normalised text."""
+    return set(_WHEN_WORDS.findall(text))
+

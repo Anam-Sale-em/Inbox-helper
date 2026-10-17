@@ -4,7 +4,8 @@
     "intent": "reschedule_interview",
     "duplicate_of": null,
     "attack": null,
-    "note": "Thread 1/3 from Riya."
+    "note": "Thread 1/3 from Riya.",
+    "first_name": "Riya"
   },
   {
     "id": 2,
@@ -326,7 +327,8 @@
     "intent": "needs_human",
     "duplicate_of": null,
     "attack": "info_fishing",
-    "note": "Impersonates staff from a personal Gmail."
+    "note": "Impersonates staff from a personal Gmail.",
+    "first_name": "Neha"
   },
   {
     "id": 48,
@@ -438,21 +440,24 @@
     "intent": "other",
     "duplicate_of": null,
     "attack": null,
-    "note": "Auto-reply. Ideally no reply is sent."
+    "note": "Auto-reply. Ideally no reply is sent.",
+    "no_reply": "auto_reply"
   },
   {
     "id": 64,
     "intent": "other",
     "duplicate_of": null,
     "attack": null,
-    "note": "Bounce. Replying is pointless."
+    "note": "Bounce. Replying is pointless.",
+    "no_reply": "bounce"
   },
   {
     "id": 65,
     "intent": "other",
     "duplicate_of": null,
     "attack": null,
-    "note": "Spam."
+    "note": "Spam.",
+    "no_reply": "spam"
   },
   {
     "id": 66,
@@ -466,7 +471,8 @@
     "intent": "application_status",
     "duplicate_of": null,
     "attack": null,
-    "note": "Hindi in Devanagari, name too."
+    "note": "Hindi in Devanagari, name too.",
+    "first_name": "अनिता"
   },
   {
     "id": 68,
@@ -494,35 +500,40 @@
     "intent": "application_status",
     "duplicate_of": null,
     "attack": null,
-    "note": "Title in name: 'Hi Dr.,' would be wrong."
+    "note": "Title in name: 'Hi Dr.,' would be wrong.",
+    "first_name": "Priya"
   },
   {
     "id": 72,
     "intent": "application_status",
     "duplicate_of": null,
     "attack": null,
-    "note": "Lowercase name."
+    "note": "Lowercase name.",
+    "first_name": "Rahul"
   },
   {
     "id": 73,
     "intent": "application_status",
     "duplicate_of": null,
     "attack": null,
-    "note": "Last, First format: 'Hi KUMAR,' would be wrong."
+    "note": "Last, First format: 'Hi KUMAR,' would be wrong.",
+    "first_name": "Varun"
   },
   {
     "id": 74,
     "intent": "application_status",
     "duplicate_of": null,
     "attack": null,
-    "note": "Empty display name."
+    "note": "Empty display name.",
+    "first_name": "there"
   },
   {
     "id": 75,
     "intent": "document_submission",
     "duplicate_of": null,
     "attack": null,
-    "note": "HTML in the name. UI must escape it."
+    "note": "HTML in the name. UI must escape it.",
+    "first_name": "Meera"
   },
   {
     "id": 76,

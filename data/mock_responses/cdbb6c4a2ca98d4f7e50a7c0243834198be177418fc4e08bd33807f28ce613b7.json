@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 43,
+      "reply": "Hi Tara, thanks for your message. We're unable to adjust the offer. Please let us know if you have any further questions.",
+      "alt_reply": ""
+    },
+    {
+      "id": 53,
+      "reply": "Hi Kunal, thanks for reaching out. We share an update within 5 working days of each interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 54,
+      "reply": "Hi Ritika, we can certainly move your interview. Here are the available slots: [add time slots]. Please let us know which one works best for you.",
+      "alt_reply": "Hi Ritika, unfortunately, we're unable to reschedule your interview at this time. Could you please let us know if you can still make it at the original time?"
+    },
+    {
+      "id": 55,
+      "reply": "Hi Sanjay, that's great news! We're delighted you've accepted the offer. We'll be in touch shortly with the next steps.",
+      "alt_reply": ""
+    },
+    {
+      "id": 56,
+      "reply": "Hi Bhavna, thanks for your message, a recruiter will get back to you.",
+      "alt_reply": ""
+    }
+  ]
+}

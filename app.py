@@ -21,14 +21,16 @@ import re
 
 from inbox.checks import FIXED_FLAGS, run_checks, unlisted_times
 from inbox.context import load_context
-from inbox.reschedule import SLOTS_TOKEN, approval_blocker, fallback_decline, unwrap_filled_blanks
+from inbox.reschedule import approval_blocker, fallback_decline, unwrap_filled_blanks
 from difflib import SequenceMatcher
 
 from inbox.dedupe import NEAR_DUPLICATE_RATIO, dedupe, normalize
+from inbox.intake import load_pasted, load_upload
 from inbox.feedback import feedback_problem
 from inbox.llm import MockResponseMissing
+from inbox.names import first_name
 from inbox.schema import Draft, Message
-from main import (load_report, split_empty, group_by_intent, make_run_dir,
+from main import (load_report, split_empty, split_no_reply, group_by_intent, make_run_dir,
                   other_names, save)
 
 DATA_DIR = Path("data")
@@ -192,20 +194,16 @@ def sidebar() -> None:
     state = st.session_state
     with st.sidebar:
         st.subheader("New run")
-        files = sorted(str(p) for p in DATA_DIR.glob("*.json"))
-        if not files:
-            st.warning(f"No message files found. Add a .json file to `{DATA_DIR}/` to get started.")
-            return
-
-        default = files.index("data/messages.json") if "data/messages.json" in files else 0
-        path = st.selectbox("Input file", files, index=default)
+        path, load = choose_source()
         mock = st.toggle("Mock mode", value=True, key="mock",
                          help="Replay recorded model responses instead of calling Gemini/Groq.")
+        if mock and state.get("source") != SOURCES[0]:
+            st.caption("Mock mode only replays saved runs. Turn it off to draft replies for your own messages.")
 
-        if st.button("Run pipeline", type="primary", width="stretch"):
+        if st.button("Run pipeline", type="primary", width="stretch", disabled=load is None):
             with st.spinner("Removing duplicates and sorting messages…"):
                 try:
-                    state.result = run_pipeline(path, mock)
+                    state.result = run_pipeline(load, path, mock)
                     state.decisions = {}
                     state.approved_at = {}
                     state.revisions = {}
@@ -231,6 +229,36 @@ def sidebar() -> None:
             st.markdown(f"{counts['On hold']} on hold, {counts['Pending']} waiting for review")
             st.caption(f"Source: {state.result['source']}")
             usage_panel(state.result)
+
+
+SOURCES = ("Sample file", "Upload a file", "Paste messages")
+PASTE_EXAMPLE = ("Riya Sharma <riya@example.com>: Can we move my interview to Friday?\n"
+                 "arjun@example.com: Any update on my application?")
+
+
+def choose_source():
+    """Where the messages come from. Returns (label, loader) or (label, None) if nothing to load yet."""
+    source = st.radio("Messages from", SOURCES, key="source")
+    if source == SOURCES[0]:
+        files = sorted(str(p) for p in DATA_DIR.glob("*.json") if not p.name.endswith("expected.json"))
+        if not files:
+            st.warning(f"No message files found. Add a .json file to `{DATA_DIR}/` or upload one.")
+            return "", None
+        default = files.index(str(DATA_DIR / "messages.json")) if str(DATA_DIR / "messages.json") in files else 0
+        path = st.selectbox("Input file", files, index=default)
+        return path, lambda: load_report(path)
+    if source == SOURCES[1]:
+        upload = st.file_uploader("JSON or CSV", type=["json", "csv"])
+        st.caption("CSV columns: name, email, message. Date and id are optional.")
+        if upload is None:
+            return "", None
+        name, raw = upload.name, upload.getvalue()
+        return name, lambda: load_upload(name, raw)
+    text = st.text_area("One message per line", height=140, placeholder=PASTE_EXAMPLE)
+    st.caption("Format: Name <email>: message")
+    if not text.strip():
+        return "", None
+    return "pasted messages", lambda: load_pasted(text)
 
 
 def usage_panel(result: dict) -> None:
@@ -260,13 +288,14 @@ def provider_env(mock: bool):
             os.environ["LLM_PROVIDER"] = previous
 
 
-def run_pipeline(path: str, mock: bool) -> dict:
+def run_pipeline(load, path: str, mock: bool) -> dict:
     with provider_env(mock):
-        loaded = load_report(path)
+        loaded = load()
         messages = loaded.messages
         if not messages and not loaded.rejected:
             raise ValueError("empty input")
         usable, empty = split_empty(messages)  # no text = nothing to sort or answer, no AI call
+        usable, no_reply = split_no_reply(usable)  # auto-replies and bounces: nobody to answer
         llm.reset_usage()
         # Duplicates are removed from the whole file first; batching only starts after this.
         unique, duplicates = dedupe(usable)
@@ -280,6 +309,7 @@ def run_pipeline(path: str, mock: bool) -> dict:
         "messages": messages,
         "duplicates": duplicates,
         "empty": empty,
+        "no_reply": no_reply,
         "rejected": loaded.rejected,
         "renumbered": {r["new_id"]: r for r in loaded.renumbered},
         "no_timezone": loaded.no_timezone,
@@ -339,6 +369,21 @@ def metrics(result: dict) -> None:
     rejected_panel(result)
     duplicates_panel(result)
     empty_panel(result)
+    no_reply_panel(result)
+
+
+def no_reply_panel(result: dict) -> None:
+    skipped = result.get("no_reply", {})
+    if not skipped:
+        return
+    by_id = {m.id: m for m in result["messages"]}
+    with st.expander(f"Show {len(skipped)} message(s) that need no reply"):
+        st.caption("Auto-replies and bounces. Nobody is waiting for an answer, so no AI call was made.")
+        for msg_id, reason in skipped.items():
+            m = by_id[msg_id]
+            st.markdown(f"**#{m.id} · {html.escape(m.from_name) or '(no name)'}** · "
+                        f"`{html.escape(m.from_email)}` · {html.escape(reason)}"
+                        f'<div class="ih-msg">{html.escape(m.text)}</div>', unsafe_allow_html=True)
 
 
 def rejected_panel(result: dict) -> None:
@@ -351,7 +396,8 @@ def rejected_panel(result: dict) -> None:
                    "processed as normal. Fix the record in the file to include it next run.")
         for r in rejected:
             with st.container(border=True):
-                st.markdown(f"**Record {r['position']} in the file** · {html.escape(r['reason'])}")
+                where = r.get("label") or f"Record {r['position']} in the file"
+                st.markdown(f"**{html.escape(where)}** · {html.escape(r['reason'])}")
                 st.code(json.dumps(r["record"], indent=2, ensure_ascii=False), language="json")
 
 
@@ -370,8 +416,8 @@ def empty_panel(result: dict) -> None:
 def metric_row(result: dict, intents: list[str]) -> None:
     cols = st.columns(6)
     cols[0].metric("Messages", len(result["messages"]) + len(result.get("rejected", [])),
-                   help="Total messages in the file. Copies, empty messages and broken records don't get "
-                        "a card; they're listed below with the reason.")
+                   help="Total messages in the file. Copies, empty messages, auto-replies and broken records "
+                        "don't get a card; they're listed below with the reason.")
     cols[1].metric("Duplicates removed", len(result["duplicates"]))
     cols[2].metric("Categories", len(result["groups"]))
     cols[3].metric("Flagged drafts", len(result["flags"]),
@@ -671,7 +717,7 @@ def ensure_card_state(message: Message, result: dict) -> None:
     state, msg_id = st.session_state, message.id
     if is_reschedule(msg_id, result) and msg_id not in state.templates:
         draft_ = result["drafts"][msg_id]
-        first = message.from_name.split()[0] if message.from_name.split() else "there"
+        first = first_name(message.from_name)
         state.templates[msg_id] = {"offer": draft_.reply,
                                    "decline": draft_.alt_reply or fallback_decline(first)}
     key = text_key(msg_id)
