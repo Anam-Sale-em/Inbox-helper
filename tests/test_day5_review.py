@@ -104,3 +104,17 @@ def test_approval_phrases_with_filler_are_caught(comment):
 def test_approval_followed_by_a_real_request_still_goes_through(comment):
     from inbox.feedback import feedback_problem
     assert feedback_problem(comment) is None
+
+
+# 7. Found in the fresh-clone check (19 Oct): "Hi Varun" for KUMAR, VARUN was flagged as naming
+#    another candidate, because a different candidate is also called Varun. The sender's own first
+#    name was worked out as "KUMAR," instead of "Varun".
+def test_greeting_the_sender_by_a_first_name_another_candidate_shares_is_not_flagged():
+    from inbox.checks import run_checks
+    from main import other_names
+    me = make_message(1, name="KUMAR, VARUN", email="varun.kumar@example.com")
+    other = make_message(2, name="Varun Malhotra", email="varun.malhotra@example.com")
+    names = other_names([me, other], me)
+    assert "Varun" not in names and "Varun Malhotra" in names
+    assert run_checks("Hi Varun, thanks for reaching out.", names) == []
+    assert run_checks("Hi Varun, Varun Malhotra also asked about this.", names) == ["other_candidate"]

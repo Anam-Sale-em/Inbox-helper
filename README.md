@@ -49,6 +49,15 @@ GROQ_RPM=30                  # optional
 Tested on Windows (PowerShell) with Python 3.12, streamlit 1.66, google-genai 2.30, groq 1.7, pydantic 2.14, pytest 9.1, and on Linux by GitHub Actions.
 
 ## Run
+
+**Try it without an API key.** My live run of the 82 test messages is recorded in `data/mock_responses/`, so this replays it:
+```powershell
+python main.py --mock             # terminal review: a = approve, e = edit, h = hold
+streamlit run app.py              # keep Mock mode on, pick data/messages.json, press Run pipeline
+```
+Revising a draft needs a real key (revisions weren't recorded).
+
+**With your own key:**
 ```powershell
 streamlit run app.py              # review screen in the browser
 python main.py                    # same pipeline, review in the terminal
@@ -119,16 +128,17 @@ Used for status and salary replies. There are deliberately no interview slots in
 
 ## Tests
 ```powershell
-python -m pytest -q     # 194 tests, no API calls; also run on every push by GitHub Actions
+python -m pytest -q     # 195 tests, no API calls; also run on every push by GitHub Actions
 ```
 
 ## Known limits
-- Injection pre-check misses base64-hidden text, Spanish and Hinglish attacks. The prompt rules are the main defence; the live attack numbers come from `eval/day1_report.py` and `eval/judge.py`
+- Injection pre-check misses base64-hidden text, Spanish and Hinglish attacks. The prompt rules are the main defence; in the live run 0 of 13 attacks were obeyed (table above)
 - The hold-out attacks were written by the same AI chat as the fixes, so they aren't fully independent
-- The answer key was drafted by AI; the log lists the labels I changed after reviewing it
+- The answer key was drafted by AI and I didn't review it label by label, so some "misses" may be label errors
+- The AI judge (`eval/judge.py`) is built and tested but wasn't run live before submitting
 - Spam still gets a draft
 - Date check misses "around 3 PM" and false-alarms on "Friday and will confirm"
-- `main.py --mock` crashes if a response wasn't recorded; recordings go stale whenever a prompt changes
+- Mock mode only replays what a live run recorded (the 82-message set is recorded). Anything else stops with a clear message, and recordings go stale whenever a prompt changes
 - A vowel-heavy keyboard mash ("qwe rty uio") still passes the comment check
 - A reschedule offer only needs *a* time; there's no check that it's a sensible date
 - On Gemini's free tier (5 requests/minute) a live run of the 82 messages takes about 4 minutes; calls are paced and fall back to Groq when Gemini's quota is used up

@@ -16,6 +16,7 @@ from inbox.checks import run_checks
 from inbox.context import DEFAULT_PATH, load_context
 from inbox.dedupe import dedupe
 from inbox.intake import LoadReport, load_file
+from inbox.names import first_name
 from inbox.review import review
 from inbox.schema import Classification, Draft, Intent, Message
 
@@ -140,8 +141,14 @@ def check_drafts(
 def other_names(messages: list[Message], sender: Message) -> list[str]:
     """Full and first names of everyone else, minus any the sender shares."""
     def variants(name: str) -> set[str]:
+        # Same first-name rules as greetings ("KUMAR, VARUN" -> "Varun"), so a sender who shares
+        # a first name with another candidate isn't flagged for their own greeting.
         parts = name.split()
-        return {name.strip(), parts[0]} if parts else set()
+        if not parts:
+            return set()
+        found = {name.strip(), parts[0].strip(",")}
+        first = first_name(name)
+        return found | ({first} if first != "there" else set())
 
     own = {n.lower() for n in variants(sender.from_name)}
     others = set().union(*(variants(m.from_name) for m in messages
