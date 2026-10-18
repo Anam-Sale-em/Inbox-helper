@@ -1,4 +1,6 @@
-"""Terminal review step: the recruiter approves, edits or rejects each draft. Sends nothing."""
+"""Terminal review step: the recruiter approves, edits or holds each draft. Sends nothing.
+
+Hold, not Reject (same as the web UI since Day 2): rejecting left a candidate with no reply."""
 
 from typing import Callable
 
@@ -14,8 +16,11 @@ def review(
     drafts: dict[int, Draft],
     flags: dict[int, list[str]],
     input_fn: Callable[[str], str] = input,
+    held: list[dict] | None = None,
 ) -> list[dict]:
-    """Walk through every message and return approved items as {id, to, reply, edited}."""
+    """Walk through every message and return approved items as {id, to, reply, edited}.
+    Held messages are appended to `held` (if given) as {id, to, draft} so nobody is dropped."""
+    held = [] if held is None else held
     _print_summary(groups)
 
     approved: list[dict] = []
@@ -32,8 +37,12 @@ def review(
             item = _ask(message, reply, input_fn, offering_slots=intent == "reschedule_interview")
             if item is not None:
                 approved.append(item)
+            else:
+                held.append({"id": message.id, "to": message.from_email, "draft": reply})
 
-    print(f"\n{DIVIDER}\nApproved {len(approved)} of {total}. Nothing has been sent.")
+    print(f"\n{DIVIDER}\nApproved {len(approved)} of {total}, {len(held)} on hold. Nothing has been sent.")
+    if held:
+        print("On hold (reply to these by hand): " + ", ".join(f"#{h['id']}" for h in held))
     return approved
 
 
@@ -63,13 +72,13 @@ def _print_message(
 def _ask(
     message: Message, reply: str, input_fn: Callable[[str], str], offering_slots: bool = False
 ) -> dict | None:
-    """Loop until a valid key; return the approved item, or None if rejected."""
+    """Loop until a valid key; return the approved item, or None if put on hold."""
     while True:
-        key = input_fn("[a]pprove  [e]dit  [r]eject: ").strip().lower()
+        key = input_fn("[a]pprove  [e]dit  [h]old: ").strip().lower()
 
         if key == "a":
             if not reply.strip():
-                print("Draft is empty. Edit it or reject.")
+                print("Draft is empty. Edit it or put it on hold.")
                 continue
             blocker = approval_blocker(reply, offering_slots)
             if blocker:
@@ -84,10 +93,10 @@ def _ask(
                 continue
             return _item(message, new_reply, edited=True)
 
-        if key == "r":
+        if key == "h":
             return None
 
-        print("Please type a, e or r.")
+        print("Please type a, e or h.")
 
 
 def _item(message: Message, reply: str, edited: bool) -> dict:

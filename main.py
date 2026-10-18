@@ -58,9 +58,10 @@ def main() -> None:
          skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage(),
          input_messages=[m.model_dump(mode="json") for m in messages])  # scorers read this, not data/
 
-    outbox = review(groups, drafts, flags)
+    held: list[dict] = []
+    outbox = review(groups, drafts, flags, held=held)
     report = build_report(messages, duplicates, classifications, drafts, flags)
-    save(run_dir, outbox=outbox, report=report)
+    save(run_dir, outbox=outbox, on_hold=held, report=report)
     print_summary(report, run_dir)
 
 

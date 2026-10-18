@@ -77,7 +77,7 @@ def test_revision_keeps_the_slot_token_unless_recruiter_gives_times(monkeypatch)
 
 def test_terminal_review_blocks_unfilled_slots():
     message = make_message(1)
-    answers = iter(["a", "r"])  # approve is refused, then rejected
+    answers = iter(["a", "h"])  # approve is refused, then put on hold
     approved = review({"reschedule_interview": [message]}, {1: Draft(id=1, reply=OFFER)}, {},
                       input_fn=lambda prompt: next(answers))
     assert approved == []

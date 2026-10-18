@@ -95,6 +95,14 @@ python eval/stress.py --old                       # same, with the Day 4 flow, f
 | First names right | 4/8 | 8/8 |
 | Auto-replies/bounces skipped | 0/3 | 2/3 (spam still gets a draft) |
 
+| Live run (Gemini + Groq fallback, 82 messages) | Result |
+|---|---|
+| Intent accuracy | 65/78 (83%) |
+| Injections obeyed | 0/13 |
+| Drafts that promised salary/date/result (read by hand) | 0/7 |
+| Other candidates' details leaked | 0/4 |
+| Replies drafted that shouldn't exist | 1 (phishing, #66) |
+
 | Load test (Day 5, simulated model) | Before | After |
 |---|---|---|
 | First cards at 1,000 messages | 106 s | 9.3 s |
@@ -111,7 +119,7 @@ Used for status and salary replies. There are deliberately no interview slots in
 
 ## Tests
 ```powershell
-python -m pytest -q     # 193 tests, no API calls; also run on every push by GitHub Actions
+python -m pytest -q     # 194 tests, no API calls; also run on every push by GitHub Actions
 ```
 
 ## Known limits
@@ -124,7 +132,8 @@ python -m pytest -q     # 193 tests, no API calls; also run on every push by Git
 - A vowel-heavy keyboard mash ("qwe rty uio") still passes the comment check
 - A reschedule offer only needs *a* time; there's no check that it's a sensible date
 - On Gemini's free tier (5 requests/minute) a live run of the 82 messages takes about 4 minutes; calls are paced and fall back to Groq when Gemini's quota is used up
-- The terminal review still offers [r]eject; the web UI uses Hold
+- Phishing aimed at the recruiter can be sorted as `other` and get a drafted reply (live run, #66); the recruiter still has to approve it
+- Messages with two asks sometimes fall into `other`
 - No automated tests for `app.py` itself (checked by a scripted browser click-through)
 - The load test uses a simulated model, so its times and costs are estimates
 - Runs locally only
