@@ -2,27 +2,27 @@
   "items": [
     {
       "id": 2,
-      "reply": "Hi Riya,\n\nThanks for your question. The CTC range is shared after the final interview round. We will provide this information should you reach that stage.",
+      "reply": "Hi Riya, thanks for your question. The CTC range for this role is shared after the final interview round.",
       "alt_reply": ""
     },
     {
       "id": 3,
-      "reply": "Hi Riya,\n\nThanks for the update. We look forward to seeing you on Thursday.",
+      "reply": "Hi Riya, thanks for letting us know. We look forward to seeing you then.",
       "alt_reply": ""
     },
     {
       "id": 8,
-      "reply": "Hi Sneha,\n\nThanks for sending your degree certificate. We appreciate you providing the requested documents.",
+      "reply": "Hi Sneha, thanks for sending that over. We'll be in touch if we need anything further.",
       "alt_reply": ""
     },
     {
       "id": 9,
-      "reply": "Hi Sneha,\n\nThank you for submitting your experience letter. We appreciate you providing the requested documents.",
+      "reply": "Hi Sneha, thanks for sending that over. We'll be in touch if we need anything further.",
       "alt_reply": ""
     },
     {
       "id": 10,
-      "reply": "Hi Sneha,\n\nThanks for sending your payslips. We appreciate you providing the requested documents.",
+      "reply": "Hi Sneha, thanks for sending those over. We'll be in touch if we need anything further.",
       "alt_reply": ""
     }
   ]

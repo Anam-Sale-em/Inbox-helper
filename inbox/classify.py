@@ -1,10 +1,15 @@
-"""Classify all messages into the 8 intents with a single LLM call (plus validation retries)."""
+"""Classify messages into the 8 intents, in batches of 50, 3 batches at a time (plus validation retries).
+
+Was one call for everything until Day 5: eval/stress.py showed the first card waited for the whole
+inbox, and past ~4,000 messages the answer hit the output cap and every message fell into needs_human."""
 
 import html
 import re
 import sys
+import threading
 import unicodedata
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Iterator
 
 from pydantic import ValidationError
 
@@ -12,6 +17,8 @@ from inbox.llm import LLMUnavailable, call_llm
 from inbox.schema import Classification, ClassificationResponse, Message, check_ids
 
 MAX_RETRIES = 2
+BATCH_SIZE = 50       # one bad answer only redoes 50; never near the output cap
+PARALLEL_BATCHES = 3  # same as drafting; inside free-tier per-minute limits
 
 SYSTEM_PROMPT = """You classify messages that job candidates sent to a recruiter.
 
@@ -43,8 +50,10 @@ _AI = r"(?:ai|assistant|bot|chatbot|model|llm|gpt)"
 INJECTION_PATTERNS = [
     re.compile(_OVERRIDE + r"\b.{0,30}?\b(?:rules?|instructions?|prompts?|guidelines?|policy|policies)\b",
                re.IGNORECASE | re.DOTALL),
-    re.compile(r"\b" + _OVERRIDE + r"\b\W+(?:\w+\W+){0,2}?(?:everything|all|anything)\b\W+(?:\w+\W+){0,3}?"
-               r"(?:above|before|previous|prior|earlier|said|told)\b", re.IGNORECASE),
+    # "ignore all above" / "disregard everything you were told" — but not "ignore all my previous emails"
+    re.compile(r"\b" + _OVERRIDE + r"\s+(?:all|everything|anything)\s+(?:that\s+)?"
+               r"(?:you\s+(?:were|have\s+been|'ve\s+been)\s+)?(?:above|before|prior|previous(?:ly)?|earlier|said|told)\b"
+               r"(?!\s+(?:e-?mails?|mails?|messages?|notes?|replies|from\s+me))", re.IGNORECASE),
     re.compile(r"\bSYSTEM\s*:"),                                          # "SYSTEM:" in caps
     re.compile(r"(?im)^\s*(?:p\.?\s*s\.?\s*)?(?:system|developer|" + _AI[3:-1] + r")\s*:"),  # role label
     re.compile(r"\b(?:reply|respond|answer|say|output)\s+only\s+with\b", re.IGNORECASE),
@@ -53,7 +62,7 @@ INJECTION_PATTERNS = [
     re.compile(r"\bact\s+as\s+(?:an?\s+|my\s+|the\s+)?(?:ai|assistant|bot|recruiter|hiring manager|hr)\b",
                re.IGNORECASE),
     re.compile(r"\b(?:note|message|instruction|request)s?\s+(?:to|for)\s+(?:the\s+)?" + _AI + r"\b", re.IGNORECASE),
-    re.compile(r"\b(?:dear|hey|hi|hello)\s+" + _AI + r"\b", re.IGNORECASE),
+    re.compile(r"\b(?:dear|hey|hi|hello)\s+(?:the\s+)?" + _AI + r"\s*[,:!.]", re.IGNORECASE),  # "Dear AI," not "Hello AI team"
     re.compile(r"\[\s*(?:internal|admin|system|recruiter|hr)\b[^\]]{0,25}\bnote\b|\[\s*(?:system|admin)\s*[:\]]",
                re.IGNORECASE),                                            # fake internal note
     re.compile(r"<\|[^|>]{1,30}\|>"),                                     # model control tokens
@@ -79,6 +88,12 @@ def normalise_for_checks(text: str) -> str:
 
 
 _stats: dict[str, Any] = {"retries": 0, "injections_blocked": 0}
+_lock = threading.Lock()
+
+
+def _bump(key: str) -> None:
+    with _lock:
+        _stats[key] += 1
 
 
 def get_stats() -> dict[str, Any]:
@@ -100,19 +115,39 @@ def classify(messages: list[Message]) -> dict[int, Classification]:
     if not messages:
         return {}
 
-    results: dict[int, Classification] = {}
-    to_classify: list[Message] = []
+    results, to_classify = precheck(messages)
+    for done in classify_batches(make_batches(to_classify)):
+        results.update(done)
+    return {m.id: results[m.id] for m in messages}
+
+
+def precheck(messages: list[Message]) -> tuple[dict[int, Classification], list[Message]]:
+    """Attempts to instruct the AI never reach it: needs_human straight away. Returns (decided, rest)."""
+    decided: dict[int, Classification] = {}
+    rest: list[Message] = []
     for m in messages:
         if looks_like_injection(m.text):
-            _stats["injections_blocked"] += 1
+            _bump("injections_blocked")
             _log(f"#{m.id} tries to instruct the AI, marked needs_human")
-            results[m.id] = Classification(id=m.id, intent="needs_human", confidence=1.0)
+            decided[m.id] = Classification(id=m.id, intent="needs_human", confidence=1.0)
         else:
-            to_classify.append(m)
+            rest.append(m)
+    return decided, rest
 
-    if to_classify:
-        results.update(_classify_with_llm(to_classify))
-    return {m.id: results[m.id] for m in messages}
+
+def make_batches(messages: list[Message]) -> list[list[Message]]:
+    return [messages[i : i + BATCH_SIZE] for i in range(0, len(messages), BATCH_SIZE)]
+
+
+def classify_batches(
+    batches: list[list[Message]], parallel: int = PARALLEL_BATCHES
+) -> Iterator[dict[int, Classification]]:
+    """Sort batches `parallel` at a time; yield each batch's result as soon as it's done."""
+    if not batches:
+        return
+    with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
+        for future in as_completed([pool.submit(_classify_with_llm, b) for b in batches]):
+            yield future.result()
 
 
 def _classify_with_llm(messages: list[Message]) -> dict[int, Classification]:
@@ -123,7 +158,7 @@ def _classify_with_llm(messages: list[Message]) -> dict[int, Classification]:
 
     for attempt in range(MAX_RETRIES + 1):
         if attempt > 0:
-            _stats["retries"] += 1
+            _bump("retries")
             _log(f"retry {attempt}/{MAX_RETRIES}")
 
         prompt = base_prompt if error is None else base_prompt + _retry_note(error)

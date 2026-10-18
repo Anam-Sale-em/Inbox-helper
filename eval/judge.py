@@ -114,7 +114,9 @@ def main() -> None:
     run_dir = Path(args.run) if args.run else latest_run()
     drafts = json.loads((run_dir / "drafts.json").read_text(encoding="utf-8"))
     intents = json.loads((run_dir / "classifications.json").read_text(encoding="utf-8"))
-    messages = {m["id"]: m for m in json.loads((ROOT / "data" / "messages.json").read_text(encoding="utf-8"))}
+    saved = run_dir / "input_messages.json"  # the run's own input; older runs fall back to data/
+    source = saved if saved.exists() else ROOT / "data" / "messages.json"
+    messages = {m["id"]: m for m in json.loads(source.read_text(encoding="utf-8"))}
     items = [{"id": int(i), "message": messages[int(i)]["text"], "reply": d["reply"],
               "intent": intents.get(i, {}).get("intent", "")}
              for i, d in drafts.items() if d["reply"].strip() and int(i) in messages]

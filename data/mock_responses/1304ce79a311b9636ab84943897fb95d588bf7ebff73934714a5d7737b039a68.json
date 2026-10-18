@@ -2,27 +2,27 @@
   "items": [
     {
       "id": 11,
-      "reply": "Hi Vikram, thanks for your message. We share an update within 5 working days of each interview round.",
+      "reply": "Hi Vikram, thanks for your message. We share an update within 5 working days of each interview round. We will get back to you as soon as there is an update.",
       "alt_reply": ""
     },
     {
       "id": 1,
-      "reply": "Hi Riya, we can certainly look into rescheduling your interview. Please let us know if one of these slots works for you: [add time slots].",
-      "alt_reply": "Hi Riya, unfortunately we're unable to reschedule your interview. Please let us know if you can still attend at the original time."
+      "reply": "Hi Riya, we can certainly look into rescheduling your interview. Please let us know if any of these times work for you: [add time slots].",
+      "alt_reply": "Hi Riya, unfortunately, we are unable to reschedule your interview at this time. Please let us know if you can still make your original interview slot."
     },
     {
       "id": 4,
-      "reply": "Hi Arjun, we can certainly look into rescheduling your interview. Please let us know if one of these slots works for you: [add time slots].",
-      "alt_reply": "Hi Arjun, unfortunately we're unable to reschedule your interview. Please let us know if you can still attend at the original time."
+      "reply": "Hi Arjun, we can certainly look into rescheduling your interview. Please let us know if any of these times work for you: [add time slots].",
+      "alt_reply": "Hi Arjun, unfortunately, we are unable to reschedule your interview at this time. Please let us know if you can still make your original interview slot."
     },
     {
       "id": 20,
-      "reply": "Hi Ananya, thanks for your message. We share an update within 5 working days of each interview round.",
+      "reply": "Hi Ananya, thanks for your message. We share an update within 5 working days of each interview round. We will get back to you as soon as there is an update.",
       "alt_reply": ""
     },
     {
       "id": 6,
-      "reply": "Hi Kabir, thank you for letting us know and for your interest in the role. We wish you all the best in your new position!",
+      "reply": "Hi Kabir, thank you for letting us know. We wish you all the best in your new role!",
       "alt_reply": ""
     }
   ]

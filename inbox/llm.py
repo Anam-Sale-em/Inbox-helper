@@ -2,6 +2,8 @@
 
 import hashlib
 import os
+import re
+from collections import deque
 import sys
 import threading
 import time
@@ -19,6 +21,12 @@ REAL_PROVIDERS = ("gemini", "groq")
 
 # Swappable so tests can skip real waiting: monkeypatch llm._sleep.
 _sleep: Callable[[float], None] = time.sleep
+_now: Callable[[], float] = time.monotonic
+
+# Requests per minute per provider (Day 5 live run: Gemini free tier = 5/min). 0 = no pacing.
+DEFAULT_RPM = {"gemini": 5, "groq": 30}
+# If the server asks us to wait longer than this, switch provider instead of retrying.
+MAX_SERVER_WAIT = 8.0
 
 
 class LLMUnavailable(Exception):
@@ -118,12 +126,16 @@ def call_llm(prompt: str, system: str | None = None) -> str:
 def _call_with_retry(name: str, prompt: str, system: str | None) -> tuple[str, dict]:
     call = _PROVIDERS[name]
     for attempt in range(len(BACKOFF_SECONDS) + 1):
+        _pace(name)
         try:
             return call(prompt, system)
         except Exception as exc:
             if attempt == len(BACKOFF_SECONDS) or not _is_retryable(exc):
                 raise
-            delay = BACKOFF_SECONDS[attempt]
+            asked = _server_wait(exc)
+            if asked is not None and asked > MAX_SERVER_WAIT:
+                raise  # quota window: the other provider is faster than waiting
+            delay = max(BACKOFF_SECONDS[attempt], asked or 0)
             with _lock:
                 _stats["retries"] += 1
             _log(f"{name} returned HTTP {_status_code(exc)}, retrying in {delay}s")
@@ -143,6 +155,58 @@ def _status_code(exc: Exception) -> int | None:
 def _is_retryable(exc: Exception) -> bool:
     code = _status_code(exc)
     return code is not None and (code == 429 or 500 <= code <= 599)
+
+
+# --- pacing ----------------------------------------------------------------
+
+_recent: dict[str, deque] = {}
+_pace_lock = threading.Lock()
+
+
+def _reset_pacing() -> None:
+    with _pace_lock:
+        _recent.clear()
+
+
+def _rpm(name: str) -> int:
+    try:
+        return int(os.getenv(f"{name.upper()}_RPM", DEFAULT_RPM.get(name, 0)))
+    except ValueError:
+        return DEFAULT_RPM.get(name, 0)
+
+
+def _pace(name: str) -> None:
+    """Keep each provider under its per-minute limit, across threads: reserve the next free
+    slot under the lock, then sleep until it outside the lock."""
+    limit = _rpm(name)
+    if limit <= 0:
+        return
+    with _pace_lock:
+        window = _recent.setdefault(name, deque())
+        now = _now()
+        while window and window[0] <= now - 60:
+            window.popleft()
+        start = now if len(window) < limit else window[-limit] + 60
+        window.append(start)
+    if start > now:
+        _log(f"{name}: pacing to {limit}/min, waiting {start - now:.0f}s")
+        _sleep(start - now)
+
+
+_WAIT_HINTS = (re.compile(r"retryDelay'?\"?:\s*'?\"?([\d.]+)s"), re.compile(r"retry in ([\d.]+)(ms|s)\b"))
+
+
+def _server_wait(exc: Exception) -> float | None:
+    """Seconds the server asked us to wait (Gemini puts it in the error text), if any."""
+    text = str(exc)
+    match = _WAIT_HINTS[0].search(text)
+    if match:
+        return float(match.group(1))
+    match = _WAIT_HINTS[1].search(text)
+    if match:
+        value = float(match.group(1))
+        return value / 1000 if match.group(2) == "ms" else value
+    return None
 
 
 # --- providers -------------------------------------------------------------

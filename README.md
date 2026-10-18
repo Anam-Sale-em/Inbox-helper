@@ -6,14 +6,16 @@ A recruiter gets a pile of candidate messages. This sorts them by what the perso
 
 All data here is synthetic. No real candidate messages.
 
+**[PROOF.md](PROOF.md)**: one page mapping what I unlearned, how AI was used and how the load was raised to the code and tests that show it.
+
 ## How it works
 ```
-file / upload / paste → skip empty, broken and auto-replies → remove duplicates → classify (1 AI call) → group → draft (5 per call, 3 at a time) → checks → review → outbox.json
+file / upload / paste → skip empty, broken and auto-replies → remove duplicates → in waves: sort (50 per call) + draft (5 per call), 3 calls at a time → checks → review → outbox.json
 ```
 - **Duplicates**: same sender, exact or ≥90% similar text with the same days and times ("Friday" vs "Monday" is not a copy). The earliest is kept; the review screen shows both with the reason.
 - **8 intents**: reschedule_interview, application_status, salary_question, offer_response, withdrawal, document_submission, other, needs_human
 - **Reliability**: every AI response is validated (Pydantic). Bad JSON is retried twice with the error sent back; 429/5xx back off 2/4/8s, then switch provider (Gemini ↔ Groq). If both are down, the message goes to `needs_human` and the run carries on.
-- **Speed and cost**: replies are drafted 5 per call, 3 calls at a time, and cards show as soon as each wave is ready. Every call's time and tokens are shown in the sidebar and saved with the run.
+- **Speed and cost**: messages are sorted 50 per call and drafted 5 per call, 3 calls at a time, in waves, so the first cards show after one wave whatever the inbox size. Every call's time and tokens are shown in the sidebar and saved with the run.
 - **Prompt injection**: message text is treated as data and wrapped in escaped tags. Attempts to instruct the AI skip it and get a holding reply. The check cleans hidden and look-alike characters first.
 - **No reply needed**: auto-replies and bounces are skipped before the AI and listed with the reason.
 - **Checks**: drafts are flagged (not blocked) for salary figures, date commitments, offer/result language, other candidates' names and specific times. Each flag shows the words that set it off.
@@ -40,7 +42,11 @@ GROQ_API_KEY=...             # https://console.groq.com/keys (fallback)
 GROQ_MODEL=openai/gpt-oss-120b
 GEMINI_THINKING_BUDGET=0     # optional; 0 = thinking off (faster, cheaper)
 GROQ_REASONING_EFFORT=low    # optional
+GEMINI_RPM=5                 # optional; requests per minute (free tier is 5), 0 = no pacing
+GROQ_RPM=30                  # optional
 ```
+
+Tested on Windows (PowerShell) with Python 3.12, streamlit 1.66, google-genai 2.30, groq 1.7, pydantic 2.14, pytest 9.1, and on Linux by GitHub Actions.
 
 ## Run
 ```powershell
@@ -77,6 +83,8 @@ python eval/offline_report.py                     # no API key: duplicates, inje
 $env:RECORD="1"; python main.py --input data/messages.json
 python eval/day1_report.py                        # intents, duplicates, attacks, against the answer key
 python eval/judge.py                              # a second model (Groq) checks every draft; spot-check 10 by hand
+python eval/stress.py                             # load test, 82 to 5,000 messages, simulated model (no key)
+python eval/stress.py --old                       # same, with the Day 4 flow, for comparison
 ```
 
 | Offline check (Day 4) | Before | After |
@@ -86,6 +94,12 @@ python eval/judge.py                              # a second model (Groq) checks
 | Injection pre-check, hold-out (never tuned on) | 0/10 | 8/10, 0/4 false alarms |
 | First names right | 4/8 | 8/8 |
 | Auto-replies/bounces skipped | 0/3 | 2/3 (spam still gets a draft) |
+
+| Load test (Day 5, simulated model) | Before | After |
+|---|---|---|
+| First cards at 1,000 messages | 106 s | 9.3 s |
+| First cards at 5,000 messages | 1,323 s | 9.6 s |
+| Messages lost at 5,000 (output cap hit) | 4,749 | 0 |
 
 ## Recruiter facts (optional)
 `config/recruiter_context.json`:
@@ -97,7 +111,7 @@ Used for status and salary replies. There are deliberately no interview slots in
 
 ## Tests
 ```powershell
-python -m pytest -q     # 157 tests, no API calls; also run on every push by GitHub Actions
+python -m pytest -q     # 193 tests, no API calls; also run on every push by GitHub Actions
 ```
 
 ## Known limits
@@ -109,5 +123,8 @@ python -m pytest -q     # 157 tests, no API calls; also run on every push by Git
 - `main.py --mock` crashes if a response wasn't recorded; recordings go stale whenever a prompt changes
 - A vowel-heavy keyboard mash ("qwe rty uio") still passes the comment check
 - A reschedule offer only needs *a* time; there's no check that it's a sensible date
-- No tests for `app.py` itself; the Groq fallback hasn't been triggered for real
+- On Gemini's free tier (5 requests/minute) a live run of the 82 messages takes about 4 minutes; calls are paced and fall back to Groq when Gemini's quota is used up
+- The terminal review still offers [r]eject; the web UI uses Hold
+- No automated tests for `app.py` itself (checked by a scripted browser click-through)
+- The load test uses a simulated model, so its times and costs are estimates
 - Runs locally only

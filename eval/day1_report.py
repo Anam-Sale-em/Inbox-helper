@@ -27,7 +27,7 @@ LINE = "=" * 70
 def main() -> None:
     run_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else latest_run()
     expected = by_id(load_json(EXPECTED_PATH))
-    messages = by_id(load_json(MESSAGES_PATH))
+    messages = run_messages(run_dir)
     classifications = int_keys(load_json(run_dir / "classifications.json"))
     drafts = int_keys(load_json(run_dir / "drafts.json"))
     flags = int_keys(load_json(run_dir / "flags.json"))
@@ -155,6 +155,12 @@ def load_json(path: Path):
     if not path.exists():
         sys.exit(f"Missing file: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_messages(run_dir: Path) -> dict[int, dict]:
+    """The messages this run actually used (saved since Day 5); older runs fall back to data/."""
+    saved = run_dir / "input_messages.json"
+    return by_id(load_json(saved if saved.exists() else MESSAGES_PATH))
 
 
 def optional_json(path: Path, default):

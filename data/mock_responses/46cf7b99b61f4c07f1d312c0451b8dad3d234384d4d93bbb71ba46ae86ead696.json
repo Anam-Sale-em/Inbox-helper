@@ -1,0 +1,74 @@
+{
+  "items": [
+    {
+      "id": 70,
+      "intent": "reschedule_interview",
+      "confidence": 0.95
+    },
+    {
+      "id": 71,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 72,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 73,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 74,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 75,
+      "intent": "document_submission",
+      "confidence": 0.95
+    },
+    {
+      "id": 76,
+      "intent": "reschedule_interview",
+      "confidence": 0.9
+    },
+    {
+      "id": 77,
+      "intent": "reschedule_interview",
+      "confidence": 0.95
+    },
+    {
+      "id": 78,
+      "intent": "offer_response",
+      "confidence": 0.95
+    },
+    {
+      "id": 79,
+      "intent": "offer_response",
+      "confidence": 0.95
+    },
+    {
+      "id": 80,
+      "intent": "document_submission",
+      "confidence": 0.9
+    },
+    {
+      "id": 81,
+      "intent": "salary_question",
+      "confidence": 0.95
+    },
+    {
+      "id": 82,
+      "intent": "salary_question",
+      "confidence": 0.9
+    },
+    {
+      "id": 22,
+      "intent": "needs_human",
+      "confidence": 0.95
+    }
+  ]
+}

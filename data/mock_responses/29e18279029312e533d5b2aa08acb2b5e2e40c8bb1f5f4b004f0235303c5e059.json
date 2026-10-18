@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 73,
+      "reply": "Hi Varun, thanks for your message. We share an update within 5 working days of each interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 74,
+      "reply": "Hi there, thanks for your message. We share an update within 5 working days of each interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 75,
+      "reply": "Hi Meera, thanks for sending that over. We'll let you know if anything else is needed.",
+      "alt_reply": ""
+    },
+    {
+      "id": 76,
+      "reply": "Hi Aditya, thanks for confirming! We look forward to speaking with you then.",
+      "alt_reply": "Hi Aditya, the interview time can't be changed. Can you still attend at the original time?"
+    },
+    {
+      "id": 77,
+      "reply": "Hi Neeraj, thanks for reaching out. We can definitely reschedule your interview. We have [add time slots] available. Please let us know which slot works best for you.",
+      "alt_reply": "Hi Neeraj, the interview time can't be changed. Can you still attend at the original time?"
+    }
+  ]
+}

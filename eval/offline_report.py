@@ -114,7 +114,7 @@ def print_report(r: dict) -> None:
     print(f"  No reply needed       {nr['caught']}/{nr['total']}   missed: {nr['missed'] or 'none'}"
           f"   false: {nr['false'] or 'none'}")
     print(f"  Empty skipped         {m['empty_skipped']}")
-    print(f"Hold-out attacks (not used to write the fixes)")
+    print("Hold-out attacks (not used to write the fixes)")
     print(f"  Injection pre-check   {h['caught']}/{h['total']}   missed: {h['missed'] or 'none'}")
     print(f"  False alarms          {len(h['false_alarms'])}/{h['benign_total']}   {h['false_alarms'] or ''}")
 

@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -37,10 +38,16 @@ def main() -> None:
     for msg_id, reason in no_reply.items():
         print(f"No reply needed for #{msg_id}: {reason}")
     unique, duplicates = dedupe(usable)
-    classifications = classify.classify(unique)
-    groups = group_by_intent(unique, classifications)
     context = load_context(args.context)
-    drafts = draft.draft_replies(unique, classifications, context)
+    try:
+        classifications = classify.classify(unique)
+        drafts = draft.draft_replies(unique, classifications, context)
+    except llm.MockResponseMissing:
+        # Mock mode only replays what a live run recorded; say so instead of a traceback.
+        print("Mock mode has no recorded response for this input. Record one with a live run:\n"
+              '  $env:RECORD="1"; python main.py --input ' + args.input, file=sys.stderr)
+        sys.exit(2)
+    groups = group_by_intent(unique, classifications)
     flags = check_drafts(unique, drafts, [])  # terminal: approver types slots with [e]dit
 
     # Saved before review so a Ctrl-C during review keeps the pipeline output.
@@ -48,7 +55,8 @@ def main() -> None:
     save(run_dir, classifications=dump(classifications), drafts=dump(drafts),
          flags=flags, duplicates=duplicates, skipped_empty=[m.id for m in empty],
          skipped_no_reply=no_reply,
-         skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage())
+         skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage(),
+         input_messages=[m.model_dump(mode="json") for m in messages])  # scorers read this, not data/
 
     outbox = review(groups, drafts, flags)
     report = build_report(messages, duplicates, classifications, drafts, flags)

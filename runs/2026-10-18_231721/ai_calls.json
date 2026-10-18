@@ -1,0 +1,121 @@
+[
+  {
+    "provider": "gemini",
+    "seconds": 4.84,
+    "input_tokens": 816,
+    "output_tokens": 499,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 9.86,
+    "input_tokens": 1833,
+    "output_tokens": 1714,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.2,
+    "input_tokens": 804,
+    "output_tokens": 260,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.54,
+    "input_tokens": 815,
+    "output_tokens": 372,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.56,
+    "input_tokens": 841,
+    "output_tokens": 239,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 1.81,
+    "input_tokens": 859,
+    "output_tokens": 193,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.48,
+    "input_tokens": 866,
+    "output_tokens": 282,
+    "thinking_tokens": 64
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.7,
+    "input_tokens": 823,
+    "output_tokens": 292,
+    "thinking_tokens": 72
+  },
+  {
+    "provider": "groq",
+    "seconds": 0.92,
+    "input_tokens": 807,
+    "output_tokens": 281,
+    "thinking_tokens": 109
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.17,
+    "input_tokens": 855,
+    "output_tokens": 251,
+    "thinking_tokens": 36
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.46,
+    "input_tokens": 859,
+    "output_tokens": 373,
+    "thinking_tokens": 121
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.53,
+    "input_tokens": 859,
+    "output_tokens": 523,
+    "thinking_tokens": 304
+  },
+  {
+    "provider": "groq",
+    "seconds": 1.44,
+    "input_tokens": 917,
+    "output_tokens": 334,
+    "thinking_tokens": 105
+  },
+  {
+    "provider": "gemini",
+    "seconds": 17.6,
+    "input_tokens": 922,
+    "output_tokens": 328,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 17.37,
+    "input_tokens": 910,
+    "output_tokens": 319,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.55,
+    "input_tokens": 900,
+    "output_tokens": 390,
+    "thinking_tokens": null
+  },
+  {
+    "provider": "gemini",
+    "seconds": 2.43,
+    "input_tokens": 892,
+    "output_tokens": 300,
+    "thinking_tokens": null
+  }
+]

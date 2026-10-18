@@ -12,7 +12,8 @@ _PUNCTUATION = re.compile(r"[^\w\s]")
 # even at 95% similar text (found Day 3: Arjun's two messages were merged).
 _WHEN_WORDS = re.compile(
     r"\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|\b(?:mon|tue|wed|thu|fri|sat|sun)\b"
-    r"|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b"
+    r"|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"  # whole words: not "APRove"
     r"|\b(?:today|tomorrow|tonight|morning|afternoon|evening|noon|midnight|am|pm|next|week|month)\b"
     r"|\d+")
 _WHITESPACE = re.compile(r"\s+")

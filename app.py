@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 import streamlit as st
 from pydantic import ValidationError
 
-from inbox import classify, draft, llm
+from inbox import draft, llm, pipeline
 import re
 
 from inbox.checks import FIXED_FLAGS, run_checks, unlisted_times
@@ -29,7 +29,7 @@ from inbox.intake import load_pasted, load_upload
 from inbox.feedback import feedback_problem
 from inbox.llm import MockResponseMissing
 from inbox.names import first_name
-from inbox.schema import Draft, Message
+from inbox.schema import Message
 from main import (load_report, split_empty, split_no_reply, group_by_intent, make_run_dir,
                   other_names, save)
 
@@ -150,40 +150,35 @@ def main() -> None:
     outbox_section(result)
 
     # Everything above is already on screen, so finished cards can be reviewed while the
-    # next wave drafts. Then rerun to show the new cards.
-    if result["pending"]:
-        draft_next_wave(result)
+    # next wave is sorted and drafted. Then rerun to show the new cards.
+    if not result["progress"].done:
+        advance(result)
         st.rerun()
 
 
 def drafting_banner(result: dict) -> None:
     if st.session_state.get("draft_error"):
         st.error(st.session_state.draft_error)
-    if not result["pending"]:
+    progress = result["progress"]
+    if progress.done:
         return
-    total = result["to_draft"]
-    done = total - sum(len(b) for b in result["pending"])
-    st.progress(done / total if total else 1.0,
-                text=f"Drafting replies: {done} of {total} ready. You can start reviewing these now.")
+    total, ready = len(progress.unique), len(progress.drafts)
+    st.progress(ready / total if total else 1.0,
+                text=f"Sorting and drafting: {ready} of {total} replies ready. You can start reviewing these now.")
 
 
-def draft_next_wave(result: dict) -> None:
-    """Draft the next few batches in parallel and store them. Never raises: on failure the
-    remaining messages get an empty draft (written by hand or put on hold) and an error shows."""
-    state = st.session_state
-    wave = result["pending"][:draft.PARALLEL_BATCHES]
-    result["pending"] = result["pending"][draft.PARALLEL_BATCHES:]
+def advance(result: dict) -> None:
+    """One more wave of sorting and drafting (see inbox/pipeline.py). Never raises: on failure the
+    rest become needs_human with an empty draft (written by hand or put on hold) and an error shows."""
+    progress = result["progress"]
     try:
         with provider_env(result["mock"]):
-            for done in draft.draft_batches(wave, result["classifications"], result["context"]):
-                result["drafts"].update(done)
+            pipeline.step(progress)
     except Exception as exc:
         traceback.print_exc()
-        state.draft_error = friendly_error(exc, result["source"], result["mock"])
-        for batch in wave + result["pending"]:
-            for m in batch:
-                result["drafts"].setdefault(m.id, Draft(id=m.id, reply=""))
-        result["pending"] = []
+        st.session_state.draft_error = friendly_error(exc, result["source"], result["mock"])
+        pipeline.give_up(progress)
+    result["groups"] = group_by_intent(progress.sorted_messages, progress.classifications)
     result["usage"] = llm.get_usage()
 
 
@@ -299,10 +294,10 @@ def run_pipeline(load, path: str, mock: bool) -> dict:
         llm.reset_usage()
         # Duplicates are removed from the whole file first; batching only starts after this.
         unique, duplicates = dedupe(usable)
-        classifications = classify.classify(unique)
         context = load_context()  # status/salary facts from config, if present
-        # Holding replies are ready now; the rest is drafted in waves (see draft_next_wave).
-        drafts, pending = draft.plan_drafts(unique, classifications)
+        # Sort and draft in waves: the first cards show after one wave, whatever the inbox size.
+        progress = pipeline.start(unique, context)
+        pipeline.step(progress)
     return {
         "source": path,
         "unique": unique,
@@ -313,15 +308,14 @@ def run_pipeline(load, path: str, mock: bool) -> dict:
         "rejected": loaded.rejected,
         "renumbered": {r["new_id"]: r for r in loaded.renumbered},
         "no_timezone": loaded.no_timezone,
-        "classifications": classifications,
-        "drafts": drafts,
+        "classifications": progress.classifications,  # same dicts the pipeline keeps filling
+        "drafts": progress.drafts,
+        "progress": progress,
         "flags": {},  # filled by refresh_flags as cards appear
-        "pending": pending,
-        "to_draft": sum(len(b) for b in pending),
         "mock": mock,
         "usage": llm.get_usage(),
         "context": context,
-        "groups": group_by_intent(unique, classifications),
+        "groups": group_by_intent(progress.sorted_messages, progress.classifications),
     }
 
 
@@ -749,6 +743,8 @@ def allowed_times(msg_id: int, result: dict) -> list[str] | None:
 
 def refresh_flags(result: dict) -> None:
     for message in result["unique"]:
+        if message.id not in result["drafts"]:  # not sorted/drafted yet: nothing to check
+            continue
         reply = st.session_state.get(text_key(message.id), "")
         found = run_checks(reply, other_names(result["unique"], message),
                            allowed_times(message.id, result)) if reply.strip() else []

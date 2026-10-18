@@ -15,3 +15,5 @@ jobs:
       - run: python -m pytest -q
       # Offline scores (duplicates, injection pre-check, names, no-reply) on every push.
       - run: python eval/offline_report.py
+      # Load test with a simulated model: 82 and 1,000 messages, no keys, no cost.
+      - run: python eval/stress.py --sizes 82 1000 --speedup 400

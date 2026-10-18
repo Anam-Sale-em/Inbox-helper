@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 73,
+      "reply": "Hi Varun, thanks for reaching out. We share an update within 5 working days of each interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 74,
+      "reply": "Hi there, thanks for reaching out. We share an update within 5 working days of each interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 75,
+      "reply": "Hi Meera, thanks for sending this over. We will process it and get back to you shortly.",
+      "alt_reply": ""
+    },
+    {
+      "id": 76,
+      "reply": "Hi Aditya, thanks for confirming! We look forward to your interview.",
+      "alt_reply": ""
+    },
+    {
+      "id": 77,
+      "reply": "Hi Neeraj, we can certainly look into rescheduling. Here are the available slots: [add time slots]. Please let us know which one works best for you.",
+      "alt_reply": "Hi Neeraj, unfortunately, we are unable to change the interview time. Please let us know if you can still make it at the original time."
+    }
+  ]
+}

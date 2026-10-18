@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": 78,
+      "reply": "Hi Sakshi, thanks for accepting the offer! We've received your request to adjust the joining date. A recruiter will get in touch with you to discuss this further.",
+      "alt_reply": ""
+    },
+    {
+      "id": 79,
+      "reply": "Hi Rajat, thank you for letting us know your decision. We appreciate you taking the time to interview with us and wish you all the best in your job search.",
+      "alt_reply": ""
+    },
+    {
+      "id": 80,
+      "reply": "Hi Mehul, thanks for your message. A recruiter will get in touch with you shortly to provide the full list of documents required for your joining day.",
+      "alt_reply": ""
+    },
+    {
+      "id": 81,
+      "reply": "Hi Tanya, thanks for your query. The CTC range for the role is shared after the final interview round.",
+      "alt_reply": ""
+    },
+    {
+      "id": 82,
+      "reply": "Hi Kriti, thanks for sharing your journey with us and for your interest in the platform team's roadmap. The CTC range is shared after the final interview round, which will include details about ESOPs and the fixed/variable split.",
+      "alt_reply": ""
+    }
+  ]
+}

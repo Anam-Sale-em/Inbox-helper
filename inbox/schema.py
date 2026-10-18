@@ -47,9 +47,9 @@ class Draft(BaseModel):
     @classmethod
     def reply_within_word_limit(cls, value: str) -> str:
         word_count = len(value.split())
-        if word_count > MAX_REPLY_WORDS:
+        if word_count >= MAX_REPLY_WORDS:  # the rule is UNDER 80
             raise ValueError(
-                f"reply has {word_count} words, max is {MAX_REPLY_WORDS}"
+                f"reply has {word_count} words, it must be under {MAX_REPLY_WORDS}"
             )
         return value
 

@@ -1,0 +1,254 @@
+{
+  "items": [
+    {
+      "id": 11,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 1,
+      "intent": "reschedule_interview",
+      "confidence": 0.98
+    },
+    {
+      "id": 4,
+      "intent": "reschedule_interview",
+      "confidence": 0.98
+    },
+    {
+      "id": 20,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 6,
+      "intent": "withdrawal",
+      "confidence": 0.99
+    },
+    {
+      "id": 2,
+      "intent": "salary_question",
+      "confidence": 0.97
+    },
+    {
+      "id": 3,
+      "intent": "other",
+      "confidence": 0.85
+    },
+    {
+      "id": 8,
+      "intent": "document_submission",
+      "confidence": 0.99
+    },
+    {
+      "id": 9,
+      "intent": "document_submission",
+      "confidence": 0.99
+    },
+    {
+      "id": 10,
+      "intent": "document_submission",
+      "confidence": 0.99
+    },
+    {
+      "id": 14,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 5,
+      "intent": "reschedule_interview",
+      "confidence": 0.98
+    },
+    {
+      "id": 16,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 17,
+      "intent": "other",
+      "confidence": 0.7
+    },
+    {
+      "id": 18,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 19,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 21,
+      "intent": "application_status",
+      "confidence": 0.95
+    },
+    {
+      "id": 32,
+      "intent": "needs_human",
+      "confidence": 0.99
+    },
+    {
+      "id": 37,
+      "intent": "application_status",
+      "confidence": 0.8
+    },
+    {
+      "id": 38,
+      "intent": "needs_human",
+      "confidence": 0.99
+    },
+    {
+      "id": 39,
+      "intent": "offer_response",
+      "confidence": 0.95
+    },
+    {
+      "id": 40,
+      "intent": "offer_response",
+      "confidence": 0.95
+    },
+    {
+      "id": 7,
+      "intent": "withdrawal",
+      "confidence": 0.7
+    },
+    {
+      "id": 41,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 42,
+      "intent": "offer_response",
+      "confidence": 0.98
+    },
+    {
+      "id": 43,
+      "intent": "offer_response",
+      "confidence": 0.98
+    },
+    {
+      "id": 44,
+      "intent": "offer_response",
+      "confidence": 0.95
+    },
+    {
+      "id": 45,
+      "intent": "needs_human",
+      "confidence": 0.9
+    },
+    {
+      "id": 46,
+      "intent": "salary_question",
+      "confidence": 0.9
+    },
+    {
+      "id": 47,
+      "intent": "needs_human",
+      "confidence": 0.99
+    },
+    {
+      "id": 48,
+      "intent": "other",
+      "confidence": 0.8
+    },
+    {
+      "id": 49,
+      "intent": "needs_human",
+      "confidence": 0.98
+    },
+    {
+      "id": 50,
+      "intent": "needs_human",
+      "confidence": 0.98
+    },
+    {
+      "id": 51,
+      "intent": "needs_human",
+      "confidence": 0.98
+    },
+    {
+      "id": 52,
+      "intent": "needs_human",
+      "confidence": 0.98
+    },
+    {
+      "id": 53,
+      "intent": "application_status",
+      "confidence": 0.7
+    },
+    {
+      "id": 54,
+      "intent": "reschedule_interview",
+      "confidence": 0.8
+    },
+    {
+      "id": 55,
+      "intent": "offer_response",
+      "confidence": 0.99
+    },
+    {
+      "id": 56,
+      "intent": "other",
+      "confidence": 0.5
+    },
+    {
+      "id": 57,
+      "intent": "application_status",
+      "confidence": 0.6
+    },
+    {
+      "id": 58,
+      "intent": "other",
+      "confidence": 0.5
+    },
+    {
+      "id": 59,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 60,
+      "intent": "other",
+      "confidence": 0.7
+    },
+    {
+      "id": 61,
+      "intent": "other",
+      "confidence": 0.7
+    },
+    {
+      "id": 62,
+      "intent": "withdrawal",
+      "confidence": 0.9
+    },
+    {
+      "id": 65,
+      "intent": "other",
+      "confidence": 0.7
+    },
+    {
+      "id": 66,
+      "intent": "other",
+      "confidence": 0.7
+    },
+    {
+      "id": 67,
+      "intent": "application_status",
+      "confidence": 0.9
+    },
+    {
+      "id": 68,
+      "intent": "reschedule_interview",
+      "confidence": 0.95
+    },
+    {
+      "id": 69,
+      "intent": "application_status",
+      "confidence": 0.9
+    }
+  ]
+}

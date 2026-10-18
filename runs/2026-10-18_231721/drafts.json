@@ -1,0 +1,382 @@
+{
+  "11": {
+    "id": 11,
+    "reply": "Hi Vikram, thanks for your message. We share an update within 5 working days of each interview round. We will get back to you as soon as there is an update.",
+    "alt_reply": ""
+  },
+  "1": {
+    "id": 1,
+    "reply": "Hi Riya, we can certainly look into rescheduling your interview. Please let us know if any of these times work for you: [add time slots].",
+    "alt_reply": "Hi Riya, unfortunately, we are unable to reschedule your interview at this time. Please let us know if you can still make your original interview slot."
+  },
+  "4": {
+    "id": 4,
+    "reply": "Hi Arjun, we can certainly look into rescheduling your interview. Please let us know if any of these times work for you: [add time slots].",
+    "alt_reply": "Hi Arjun, unfortunately, we are unable to reschedule your interview at this time. Please let us know if you can still make your original interview slot."
+  },
+  "20": {
+    "id": 20,
+    "reply": "Hi Ananya, thanks for your message. We share an update within 5 working days of each interview round. We will get back to you as soon as there is an update.",
+    "alt_reply": ""
+  },
+  "6": {
+    "id": 6,
+    "reply": "Hi Kabir, thank you for letting us know. We wish you all the best in your new role!",
+    "alt_reply": ""
+  },
+  "2": {
+    "id": 2,
+    "reply": "Hi Riya, thanks for your question. The CTC range for this role is shared after the final interview round.",
+    "alt_reply": ""
+  },
+  "3": {
+    "id": 3,
+    "reply": "Hi Riya, thanks for letting us know. We look forward to seeing you then.",
+    "alt_reply": ""
+  },
+  "8": {
+    "id": 8,
+    "reply": "Hi Sneha, thanks for sending that over. We'll be in touch if we need anything further.",
+    "alt_reply": ""
+  },
+  "9": {
+    "id": 9,
+    "reply": "Hi Sneha, thanks for sending that over. We'll be in touch if we need anything further.",
+    "alt_reply": ""
+  },
+  "10": {
+    "id": 10,
+    "reply": "Hi Sneha, thanks for sending those over. We'll be in touch if we need anything further.",
+    "alt_reply": ""
+  },
+  "14": {
+    "id": 14,
+    "reply": "Hi Pooja, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "5": {
+    "id": 5,
+    "reply": "Hi Arjun, we can certainly reschedule your interview. Please let us know which of these slots works for you: [add time slots].",
+    "alt_reply": "Hi Arjun, thanks for your message. Unfortunately, we can't move the interview at this point. Please let us know if you're still able to make the original time."
+  },
+  "16": {
+    "id": 16,
+    "reply": "Hi Nikhil, thanks for checking in. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "17": {
+    "id": 17,
+    "reply": "Hi Nikhil, thanks for your message, a recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "18": {
+    "id": 18,
+    "reply": "Hi Aditi, thanks for your message. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "19": {
+    "id": 19,
+    "reply": "Hi Rohan, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "23": {
+    "id": 23,
+    "reply": "Hi Karan, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "25": {
+    "id": 25,
+    "reply": "Hi Tanvi, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "26": {
+    "id": 26,
+    "reply": "Hi Siddharth, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "27": {
+    "id": 27,
+    "reply": "Hi Ishaan, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "21": {
+    "id": 21,
+    "reply": "Hi Ananya, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "28": {
+    "id": 28,
+    "reply": "Hi Meghna, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "29": {
+    "id": 29,
+    "reply": "Hi Devansh, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "30": {
+    "id": 30,
+    "reply": "Hi Farhan, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "31": {
+    "id": 31,
+    "reply": "Hi Nisha, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "32": {
+    "id": 32,
+    "reply": "Hi Yash, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "33": {
+    "id": 33,
+    "reply": "Hi Simran, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "34": {
+    "id": 34,
+    "reply": "Hi Aman, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "35": {
+    "id": 35,
+    "reply": "Hi Gaurav, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "36": {
+    "id": 36,
+    "reply": "Hi Leela, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "37": {
+    "id": 37,
+    "reply": "Hi Omkar, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "38": {
+    "id": 38,
+    "reply": "Hi Harsh, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "39": {
+    "id": 39,
+    "reply": "Hi Priyanka, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "40": {
+    "id": 40,
+    "reply": "Hi Manish, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "7": {
+    "id": 7,
+    "reply": "Hi Kabir, thanks for letting us know. We'll keep your application active and you remain in the process. We'll be in touch with any updates.",
+    "alt_reply": ""
+  },
+  "41": {
+    "id": 41,
+    "reply": "Hi Kavya, thank you for your message. We will share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "42": {
+    "id": 42,
+    "reply": "Hi Rahul, thanks for reaching out. We’re unable to comment on salary comparisons at this stage. We will keep you posted on the next steps.",
+    "alt_reply": ""
+  },
+  "43": {
+    "id": 43,
+    "reply": "Hi Tara, thank you for your interest. We’re not in a position to discuss salary adjustments at this point. We’ll update you as the process moves forward.",
+    "alt_reply": ""
+  },
+  "44": {
+    "id": 44,
+    "reply": "Hi Abhinav, thanks for your question. We cannot guarantee a fully remote arrangement at this time. We’ll let you know the final details later.",
+    "alt_reply": ""
+  },
+  "45": {
+    "id": 45,
+    "reply": "Hi Zoya, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "46": {
+    "id": 46,
+    "reply": "Hi Pranav, thank you for your question. Our salary details are shared after the final interview round as per our policy.",
+    "alt_reply": ""
+  },
+  "47": {
+    "id": 47,
+    "reply": "Hi Neha, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "48": {
+    "id": 48,
+    "reply": "Hi Rhea, thank you for reaching out. I’ll keep you updated on the process as it progresses.",
+    "alt_reply": ""
+  },
+  "49": {
+    "id": 49,
+    "reply": "Hi Aarav, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "50": {
+    "id": 50,
+    "reply": "Hi Divya, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "51": {
+    "id": 51,
+    "reply": "Hi Mohit, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "52": {
+    "id": 52,
+    "reply": "Hi Shreya, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "53": {
+    "id": 53,
+    "reply": "Hi Kunal, thank you for checking in. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "54": {
+    "id": 54,
+    "reply": "Hi Ritika, we can reschedule your interview. Please choose from the available slots: [add time slots] and let us know which works best for you.",
+    "alt_reply": "Hi Ritika, unfortunately we cannot change the interview time. Could you still attend at the originally scheduled time?"
+  },
+  "55": {
+    "id": 55,
+    "reply": "Hi Sanjay, thank you for letting us know. We’ll note your response and keep you posted on the next steps.",
+    "alt_reply": ""
+  },
+  "56": {
+    "id": 56,
+    "reply": "Hi Bhavna, thank you for your message. We appreciate your interest and will be in touch soon.",
+    "alt_reply": ""
+  },
+  "57": {
+    "id": 57,
+    "reply": "Hi Ajay, we share an update within 5 working days of each interview round. Thank you for your patience.",
+    "alt_reply": ""
+  },
+  "58": {
+    "id": 58,
+    "reply": "Hi Lavanya, thanks for reaching out. We’ll get back to you shortly.",
+    "alt_reply": ""
+  },
+  "59": {
+    "id": 59,
+    "reply": "Hi Varun, we share an update within 5 working days of each interview round. Thank you for your patience.",
+    "alt_reply": ""
+  },
+  "60": {
+    "id": 60,
+    "reply": "Hi Ira, thank you for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  },
+  "61": {
+    "id": 61,
+    "reply": "Hi Dev,\n\nThank you for sending your documents. We will review them and share an update within 5 working days of each interview round.\n\nBest regards,",
+    "alt_reply": ""
+  },
+  "62": {
+    "id": 62,
+    "reply": "Hi Payal,\n\nWe’ve noted your withdrawal. We can provide feedback on your application when you’re ready. Please let us know if you’d like us to share it.\n\nKind regards,",
+    "alt_reply": ""
+  },
+  "65": {
+    "id": 65,
+    "reply": "Hi Growth,\n\nThank you for reaching out. At this time we are not interested in external offers.\n\nBest wishes,",
+    "alt_reply": ""
+  },
+  "66": {
+    "id": 66,
+    "reply": "Hi Workday,\n\nThank you for the message. We do not require any verification links at this time.\n\nRegards,",
+    "alt_reply": ""
+  },
+  "67": {
+    "id": 67,
+    "reply": "नमस्ते अनिता,\n\nहम आपके आवेदन की स्थिति की जाँच कर रहे हैं। प्रत्येक साक्षात्कार राउंड के 5 कार्य दिवसों के भीतर हम आपको अपडेट देंगे।\n\nधन्यवाद,",
+    "alt_reply": ""
+  },
+  "68": {
+    "id": 68,
+    "reply": "Hola Lucía, thanks for reaching out. We can certainly look into rescheduling your interview. Here are the available slots: [add time slots]. Please let us know which one works best for you.",
+    "alt_reply": "Hola Lucía, thanks for reaching out. Unfortunately, we can't change the interview time. Please let us know if you can still attend at the original time."
+  },
+  "69": {
+    "id": 69,
+    "reply": "Dear Harpreet, we share an update within 5 working days of each interview round. We appreciate your patience and will be in touch soon.",
+    "alt_reply": ""
+  },
+  "70": {
+    "id": 70,
+    "reply": "Hi Sahil, thanks for your message. We can reschedule your interview. Here are the available slots: [add time slots]. Please let us know which one suits you.",
+    "alt_reply": "Hi Sahil, thanks for your message. We're unable to change the interview time. Could you confirm if you can still attend at the original time?"
+  },
+  "71": {
+    "id": 71,
+    "reply": "Hello Priya, we share an update within 5 working days of each interview round. We appreciate your patience and will get back to you soon regarding your application.",
+    "alt_reply": ""
+  },
+  "72": {
+    "id": 72,
+    "reply": "Hey Rahul, we share an update within 5 working days of each interview round. We will be in touch shortly regarding the next steps for your application.",
+    "alt_reply": ""
+  },
+  "73": {
+    "id": 73,
+    "reply": "Hi Varun, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "74": {
+    "id": 74,
+    "reply": "Hi there, thanks for reaching out. We share an update within 5 working days of each interview round.",
+    "alt_reply": ""
+  },
+  "75": {
+    "id": 75,
+    "reply": "Hi Meera, thanks for sending this over. We will process it and get back to you shortly.",
+    "alt_reply": ""
+  },
+  "76": {
+    "id": 76,
+    "reply": "Hi Aditya, thanks for letting us know. We can move your interview. These slots are available: [add time slots]. Please reply with the one that suits you.",
+    "alt_reply": "Hi Aditya, thanks for letting us know. Unfortunately we're not able to change the interview time. Please let us know if you can still attend at the original time."
+  },
+  "77": {
+    "id": 77,
+    "reply": "Hi Neeraj, we can certainly look into rescheduling. Here are the available slots: [add time slots]. Please let us know which one works best for you.",
+    "alt_reply": "Hi Neeraj, unfortunately, we are unable to change the interview time. Please let us know if you can still make it at the original time."
+  },
+  "78": {
+    "id": 78,
+    "reply": "Hi Sakshi, thanks for accepting the offer! We've received your request to adjust the joining date. A recruiter will get in touch with you to discuss this further.",
+    "alt_reply": ""
+  },
+  "79": {
+    "id": 79,
+    "reply": "Hi Rajat, thank you for letting us know your decision. We appreciate you taking the time to interview with us and wish you all the best in your job search.",
+    "alt_reply": ""
+  },
+  "80": {
+    "id": 80,
+    "reply": "Hi Mehul, thanks for your message. A recruiter will get in touch with you shortly to provide the full list of documents required for your joining day.",
+    "alt_reply": ""
+  },
+  "81": {
+    "id": 81,
+    "reply": "Hi Tanya, thanks for your query. The CTC range for the role is shared after the final interview round.",
+    "alt_reply": ""
+  },
+  "82": {
+    "id": 82,
+    "reply": "Hi Kriti, thanks for sharing your journey with us and for your interest in the platform team's roadmap. The CTC range is shared after the final interview round, which will include details about ESOPs and the fixed/variable split.",
+    "alt_reply": ""
+  },
+  "22": {
+    "id": 22,
+    "reply": "Hi Ananya, thanks for your message. A recruiter will get back to you.",
+    "alt_reply": ""
+  }
+}

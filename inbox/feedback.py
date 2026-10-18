@@ -67,6 +67,19 @@ DANGLING_ENDINGS = {
 }
 
 
+_FILLER = re.compile(r"^(?:this|it|that|that's|thats|it's|its)\s+|\s+(?:to me|for me|thanks|thank you|thx|now|then)$")
+_MORE_APPROVALS = {"looks great", "sounds good", "good enough", "all set", "send it", "ship it",
+                   "all set send it", "is good", "looks okay", "looks ok"}
+
+
+def _approval_only(normalized: str) -> bool:
+    """"looks good to me", "this looks fine", "LGTM thanks": approval with filler, nothing to change."""
+    text = normalized
+    for _ in range(3):  # peel "this … to me thanks" layer by layer
+        text = _FILLER.sub("", text).strip()
+    return normalized in APPROVAL_ONLY or text in APPROVAL_ONLY or text in _MORE_APPROVALS
+
+
 def feedback_problem(comment: str) -> str | None:
     """Return a message explaining what's wrong with the comment, or None if it's usable."""
     text = comment.strip()
@@ -74,7 +87,7 @@ def feedback_problem(comment: str) -> str | None:
         return "Please add a short note on what you'd like changed."
 
     normalized = re.sub(r"[^\w\s']", "", text.lower()).strip()
-    if normalized in APPROVAL_ONLY:
+    if _approval_only(normalized):
         return "Looks like you're happy with this draft. You can use Approve instead."
 
     without_please = re.sub(r"\b(?:please|pls|plz|kindly)\b", "", normalized)

@@ -57,5 +57,6 @@ def test_first_drafts_never_write_a_time():
 
 
 def test_batching_matches_the_directive():
-    from inbox import draft
+    from inbox import classify, draft
     assert (draft.BATCH_SIZE, draft.PARALLEL_BATCHES) == (5, 3)
+    assert (classify.BATCH_SIZE, classify.PARALLEL_BATCHES) == (50, 3)  # v2.0: no single sorting call
