@@ -29,7 +29,7 @@ def test_calendar_slots_fill_the_reschedule_blank_and_unlock_approve(tmp_path, m
     reads = []
     monkeypatch.setattr(calendar_slots, "get_free_slots", lambda **_: reads.append(1) or friday)
     _, at = _start(tmp_path, monkeypatch)
-    at.sidebar.selectbox[0].set_value("data/messages.json").run()
+    at.sidebar.selectbox[0].set_value(str(Path("data") / "messages.json")).run()
     at.toggle(key="use_calendar").set_value(True).run()
     [b for b in at.sidebar.button if b.label == "Run pipeline"][0].click().run()
     assert not at.exception

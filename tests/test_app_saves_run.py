@@ -26,7 +26,7 @@ def test_review_screen_saves_the_run_and_every_decision(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "make_run_dir", lambda suffix="": run_dir)
 
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120).run()
-    at.sidebar.selectbox[0].set_value("data/messages.json").run()
+    at.sidebar.selectbox[0].set_value(str(Path("data") / "messages.json")).run()
     [b for b in at.sidebar.button if b.label == "Run pipeline"][0].click().run()
     assert not at.exception
 
