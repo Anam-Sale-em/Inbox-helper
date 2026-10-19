@@ -14,7 +14,7 @@ All data here is synthetic. No real candidate messages.
 - **Two layers against prompt injection.** In the live run, 12 of 13 attacks were stopped before reaching the AI and the model sent the 13th to a human. None obeyed.
 - **Load-tested to 5,000 messages** (simulated model). One sorting call for everything lost 4,749 messages at the output cap; sorting in waves loses none and shows the first cards in about 9 s at any size.
 - **Live-tested on the free tier.** The first live run found Gemini's 5 requests/minute limit; calls are now paced per provider and fall back to Groq.
-- **AI checking AI.** A second model judges every draft against the rules and the recruiter facts, and picks 10 verdicts for a human to check. Its first live run showed its own blind spot: 13 of its 16 fails were our approved status line. Fixed.
+- **AI checking AI.** A second model judges every draft against the rules and the recruiter facts, and picks 10 verdicts for a human to check. Its first live run showed its own blind spot: 13 of its 16 fails were our approved status line. With the recruiter facts it went from 60/76 to 75/76, and the one fail left is a real miss.
 - **Gmail in, calendar times out (optional).** Reads candidate emails from a Gmail label, read-only, checking every minute like n8n's Gmail trigger. Reschedule cards show free slots from Google Calendar, the day the candidate asked for first; the recruiter picks and the picks fill the blank. The AI never sees the calendar. Tested against a fake Gmail and calendar; your own account needs the one-time setup below.
 
 ## How it works
@@ -121,7 +121,7 @@ python eval/stress.py --old                       # same, with the Day 4 flow, f
 | Drafts that promised salary/date/result (read one by one) | 0/7 |
 | Other candidates' details leaked | 0/4 |
 | Replies drafted that shouldn't exist | 1 (phishing, #66; a recruiter approves every reply) |
-| AI judge (Groq), first run | 60/76 passed. 13 of the 16 fails were our approved status line: the judge hadn't been given the recruiter facts. Fixed |
+| AI judge (Groq) | First run 60/76: 13 of the 16 fails were our approved status line, because the judge hadn't been given the recruiter facts. Re-run with the facts: **75/76**; the one fail (#70) is a real sorting miss. Both results are in the run folder (`judge_before_fix.json`, `judge.json`) |
 
 These numbers are from the saved run `runs/2026-10-18_231721`. I also ran it live in the review screen several times; the screen didn't save runs then, and it does now.
 

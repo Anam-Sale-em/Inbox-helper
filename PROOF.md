@@ -18,13 +18,13 @@ Most of the code and most of the docs here were written by AI from my prompts. T
 | Reject bad input because it's "safe" | Process what can be read, show what was skipped and why. I reversed my own fix for this | log F15 → F17 |
 | Keep a design because it works | Threw away 3 working reschedule designs for the simplest | log F12 |
 | Guess cost and speed | Every AI call logs tokens and time; a load test for the rest | sidebar "AI usage", `eval/stress.py` |
-| Trust the checker's score | Ran the AI judge live. 13 of its 16 fails turned out to be our own approved wording, because the judge had never been shown the recruiter facts. Fixed the judge, test first | `eval/judge.py`, `tests/test_judge.py`, log J1, F28 |
+| Trust the checker's score | Ran the AI judge live. 13 of its 16 fails turned out to be our own approved wording, because the judge had never been shown the recruiter facts. Fixed the judge, test first: 60/76 → 75/76 | `eval/judge.py`, `tests/test_judge.py`, log J1, F28 |
 
 ## Use: AI as the main way of working
 
 - **Every file built with AI.** 70+ log entries across two chats, including the times it went off my rules: it quietly undid a fix (F9), and a prompt drifted from the code (F14).
 - **AI inside the tool:** sorting into 8 intents, drafting, revising from my comments. Every answer is validated, retried with the error, and falls back to the other provider. In the first live run Gemini's free tier ran out (5 requests a minute) and Groq finished the job.
-- **AI checking AI:** `eval/judge.py` has a second model (Groq) judge every Gemini draft against the rules and the recruiter facts, and picks 10 verdicts for a human to check. First live run: 60/76 passed, and 13 of the 16 fails were our own approved status line. So the judge now gets the recruiter facts, and "didn't answer the question" is its own rule instead of being filed as "obeyed the message".
+- **AI checking AI:** `eval/judge.py` has a second model (Groq) judge every Gemini draft against the rules and the recruiter facts, and picks 10 verdicts for a human to check. First live run: 60/76 passed, and 13 of the 16 fails were our own approved status line. So the judge now gets the recruiter facts, and "didn't answer the question" is its own rule. Re-run: 75/76; the one fail (#70) is a real sorting miss.
 - **Where I don't trust it:** the AI never picks an interview time, never sees the calendar or other candidates' details, and never sends anything. Free slots come from Google Calendar's free/busy, and I pick them.
 
 ## Raise the load: harder every day, and what broke
