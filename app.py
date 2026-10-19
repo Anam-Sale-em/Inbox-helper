@@ -16,22 +16,23 @@ from urllib.parse import quote, urlencode
 import streamlit as st
 from pydantic import ValidationError
 
-from inbox import draft, llm, pipeline
+from inbox import calendar_slots, draft, gmail_source, llm, pipeline
 import re
 
 from inbox.checks import FIXED_FLAGS, run_checks, unlisted_times
 from inbox.context import load_context
-from inbox.reschedule import approval_blocker, fallback_decline, unwrap_filled_blanks
+from inbox.reschedule import SLOTS_TOKEN, approval_blocker, fallback_decline, unwrap_filled_blanks
 from difflib import SequenceMatcher
 
 from inbox.dedupe import NEAR_DUPLICATE_RATIO, dedupe, normalize
 from inbox.intake import load_pasted, load_upload
 from inbox.feedback import feedback_problem
+from inbox.google_auth import GoogleSetupError
 from inbox.llm import MockResponseMissing
 from inbox.names import first_name
 from inbox.schema import Message
 from main import (load_report, split_empty, split_no_reply, group_by_intent, make_run_dir,
-                  other_names, save)
+                  other_names, save, check_drafts, save_pipeline_output)
 
 DATA_DIR = Path("data")
 SUBJECT = "Re: your application"
@@ -138,6 +139,7 @@ def main() -> None:
         empty_state()
         return
 
+    ensure_run_saved(result)  # once drafting is done: same files as a terminal run
     for message in result["unique"]:
         if message.id in result["drafts"]:  # still-drafting messages get their card next wave
             ensure_card_state(message, result)
@@ -148,6 +150,7 @@ def main() -> None:
     intent_tabs(result)
     st.divider()
     outbox_section(result)
+    save_decisions(result)  # outbox.json and on_hold.json, kept current as you review
 
     # Everything above is already on screen, so finished cards can be reviewed while the
     # next wave is sorted and drafted. Then rerun to show the new cards.
@@ -159,6 +162,8 @@ def main() -> None:
 def drafting_banner(result: dict) -> None:
     if st.session_state.get("draft_error"):
         st.error(st.session_state.draft_error)
+    if st.session_state.get("save_error"):
+        st.warning(st.session_state.save_error)
     progress = result["progress"]
     if progress.done:
         return
@@ -182,6 +187,47 @@ def advance(result: dict) -> None:
     result["usage"] = llm.get_usage()
 
 
+def ensure_run_saved(result: dict) -> None:
+    """Save the run like main.py does as soon as sorting and drafting are done, so
+    eval/day1_report.py and eval/judge.py work on review-screen runs too. Tried once per run."""
+    if "run_dir" in result or not result["progress"].done:
+        return
+    result["run_dir"] = None  # a failure shows a warning instead of retrying on every rerun
+    gmail_ids = result.get("gmail_ids") or {}
+    try:
+        run_dir = make_run_dir(suffix="_gmail" if gmail_ids else "")
+        save_pipeline_output(
+            run_dir, messages=result["messages"], rejected=result["rejected"],
+            renumbered=list(result["renumbered"].values()), empty=result["empty"],
+            no_reply=result["no_reply"], duplicates=result["duplicates"],
+            classifications=result["classifications"], drafts=result["drafts"],
+            flags=check_drafts(result["unique"], result["drafts"], []), ai_calls=result["usage"])
+        result["run_dir"] = run_dir
+        if gmail_ids:
+            gmail_source.mark_seen(gmail_ids.values())  # only now, so a failed run skips nobody
+    except OSError as exc:
+        st.session_state.save_error = f"Couldn't save this run: {exc.strerror or exc}."
+
+
+def save_decisions(result: dict) -> None:
+    """Approved and held replies go into the run folder whenever they change. No button."""
+    run_dir = result.get("run_dir")
+    if not run_dir:
+        return
+    state = st.session_state
+    held = [{"id": m.id, "to": m.from_email, "draft": state.get(text_key(m.id), result["drafts"][m.id].reply)}
+            for m in result["unique"] if state.decisions.get(m.id) == "On hold"]
+    files = {"outbox": outbox_items(result), "on_hold": held}
+    snapshot = (str(run_dir), json.dumps(files, sort_keys=True, ensure_ascii=False))
+    if state.get("saved_snapshot") == snapshot:
+        return
+    try:
+        save(run_dir, **files)
+        state.saved_snapshot = snapshot
+    except OSError as exc:
+        state.save_error = f"Couldn't save your decisions: {exc.strerror or exc}."
+
+
 # --- sidebar ---------------------------------------------------------------------
 
 
@@ -194,6 +240,9 @@ def sidebar() -> None:
                          help="Replay recorded model responses instead of calling Gemini/Groq.")
         if mock and state.get("source") != SOURCES[0]:
             st.caption("Mock mode only replays saved runs. Turn it off to draft replies for your own messages.")
+        st.toggle("Suggest times from Google Calendar", key="use_calendar",
+                  help="Reschedule cards show free slots from your calendar (free/busy only). "
+                       "You pick; the AI never sees the calendar. Needs the Google sign-in (README).")
 
         if st.button("Run pipeline", type="primary", width="stretch", disabled=load is None):
             with st.spinner("Removing duplicates and sorting messages…"):
@@ -208,7 +257,7 @@ def sidebar() -> None:
                     state.rendered = {}
                     state.kind_text = {}
                     state.run_no += 1
-                    state.pop("last_saved", None)
+                    state.pop("save_error", None)
                     state.pop("draft_error", None)
                 except Exception as exc:
                     traceback.print_exc()  # full detail in the terminal, friendly text in the UI
@@ -226,7 +275,7 @@ def sidebar() -> None:
             usage_panel(state.result)
 
 
-SOURCES = ("Sample file", "Upload a file", "Paste messages")
+SOURCES = ("Sample file", "Upload a file", "Paste messages", "Gmail")
 PASTE_EXAMPLE = ("Riya Sharma <riya@example.com>: Can we move my interview to Friday?\n"
                  "arjun@example.com: Any update on my application?")
 
@@ -249,11 +298,44 @@ def choose_source():
             return "", None
         name, raw = upload.name, upload.getvalue()
         return name, lambda: load_upload(name, raw)
+    if source == SOURCES[3]:
+        return gmail_source_controls()
     text = st.text_area("One message per line", height=140, placeholder=PASTE_EXAMPLE)
     st.caption("Format: Name <email>: message")
     if not text.strip():
         return "", None
     return "pasted messages", lambda: load_pasted(text)
+
+
+def gmail_source_controls():
+    """Read candidate emails from Gmail (read-only), like n8n's Gmail trigger: a search picks the
+    emails, and ones already loaded are skipped."""
+    query = st.text_input("Gmail search", value=gmail_source.default_query(), key="gmail_query",
+                          help="Same as the Gmail search box. A Gmail filter that labels candidate "
+                               "mail makes this the trigger. Use test emails: drafts go to the AI.")
+    only_new = st.toggle("Skip emails already loaded", value=True, key="gmail_only_new")
+    if st.toggle("Check for new emails every minute", key="gmail_watch"):
+        gmail_watch(query)
+    st.caption("Read-only: nothing is sent, marked or deleted in Gmail.")
+    return f"Gmail ({query})", lambda: gmail_source.load_gmail(query, only_new=only_new)
+
+
+@st.fragment(run_every="60s")
+def gmail_watch(query: str) -> None:
+    """Every minute, count new matching emails. It never starts a run by itself, so a review in
+    progress is never replaced."""
+    checked = datetime.now().strftime("%H:%M")
+    on_screen = ((st.session_state.get("result") or {}).get("gmail_ids") or {}).values()
+    try:
+        waiting = gmail_source.count_new(query, exclude=on_screen)
+    except Exception as exc:  # not signed in, offline, API off: say so, keep the screen working
+        st.caption(f"Couldn't check Gmail ({checked}): {exc}")
+        return
+    if waiting:
+        st.info(f"{waiting} new email{'s' if waiting != 1 else ''} (checked {checked}). "
+                "Press Run pipeline to draft replies.")
+    else:
+        st.caption(f"No new emails (checked {checked}).")
 
 
 def usage_panel(result: dict) -> None:
@@ -316,6 +398,7 @@ def run_pipeline(load, path: str, mock: bool) -> dict:
         "usage": llm.get_usage(),
         "context": context,
         "groups": group_by_intent(progress.sorted_messages, progress.classifications),
+        "gmail_ids": loaded.source_ids,  # marked as loaded only once the run is saved
     }
 
 
@@ -335,6 +418,13 @@ def friendly_error(exc: Exception, path: str, mock: bool) -> str:
     if isinstance(exc, MockResponseMissing):
         return ("Mock mode has no recorded response for this input. Turn mock mode off and run once "
                 "with `RECORD=1` set, or pick a file you've already recorded.")
+    if isinstance(exc, GoogleSetupError):
+        return str(exc)
+    if isinstance(exc, ValueError) and str(exc) == "empty input" and path.startswith("Gmail"):
+        return ("No new emails match the search. Send a test email under the label, or turn off "
+                "\"Skip emails already loaded\".")
+    if type(exc).__name__ == "HttpError":
+        return f"Google returned an error: {exc}"
     if isinstance(exc, ValueError) and str(exc) == "empty input":
         return f"`{path}` has no messages in it."
     if isinstance(exc, ValueError) and "LLM_PROVIDER" in str(exc):
@@ -574,6 +664,55 @@ def reschedule_controls(message: Message, result: dict) -> None:
     run_no, msg_id = st.session_state.run_no, message.id
     st.radio("Can the interview be moved?", [OFFER, DECLINE], horizontal=True,
                       key=f"choice_{run_no}_{msg_id}", on_change=rebuild_reply, args=(msg_id,))
+    if st.session_state.get("use_calendar") and current_kind(msg_id) == "offer":
+        calendar_picker(message, result)
+
+
+def calendar_picker(message: Message, result: dict) -> None:
+    """Free slots from the recruiter's calendar, the day the candidate asked for first. The
+    recruiter picks; the picks fill the blank. The AI never sees any of this."""
+    state, run_no = st.session_state, st.session_state.run_no
+    if SLOTS_TOKEN not in state.get(text_key(message.id), ""):
+        return  # blank already filled or typed over
+    slots, rules = calendar_free_slots(result)
+    if slots is None:
+        return
+    options = [calendar_slots.label(s) for s in calendar_slots.suggest(slots, message.text, rules)]
+    if not options:
+        st.caption("No free slots in your calendar over the next working days.")
+        return
+    picked = st.pills("Free in your calendar", options, selection_mode="multi",
+                      key=f"slots_{run_no}_{message.id}")
+    st.button("Put these times in the reply", key=f"fill_{run_no}_{message.id}", disabled=not picked,
+              on_click=fill_slots, args=(message.id,))
+
+
+def calendar_free_slots(result: dict):
+    """One free/busy read per run, shared by every reschedule card. (slots or None, rules)"""
+    if "calendar" not in result:
+        rules = calendar_slots.SlotRules.from_env()
+        try:
+            result["calendar"] = {"slots": calendar_slots.get_free_slots(rules=rules), "rules": rules, "error": ""}
+        except Exception as exc:  # not signed in, wrong calendar id, offline: the card still works
+            result["calendar"] = {"slots": None, "rules": rules, "error": str(exc)}
+    cal = result["calendar"]
+    if cal["error"]:
+        st.caption(f"Calendar not available: {cal['error']}")
+    return cal["slots"], cal["rules"]
+
+
+def fill_slots(msg_id: int) -> None:
+    """Picked times replace the blank. Picking times isn't an edit, same as picking a version."""
+    state = st.session_state
+    key = text_key(msg_id)
+    text = state.get(key, "")
+    filled = calendar_slots.fill_blank(text, list(state.get(f"slots_{state.run_no}_{msg_id}") or []))
+    if filled == text:
+        return
+    if text == state.rendered.get(msg_id):
+        state.rendered[msg_id] = filled
+    state[key] = filled
+    reopen_if_approved(msg_id)
 
 
 def revision_history(history: list[dict]) -> None:
@@ -633,7 +772,6 @@ def feedback_box(message: Message, result: dict, reply: str, revision_no: int) -
     state.decisions.pop(message.id, None)  # back to Pending
     state.approved_at.pop(message.id, None)
     state.feedback_open.discard(message.id)
-    state.pop("last_saved", None)
     st.rerun()
 
 
@@ -652,6 +790,9 @@ def card_header(message: Message, status: str) -> str:
 
 def outbox_section(result: dict) -> None:
     st.subheader("Outbox")
+    if result.get("run_dir"):
+        st.caption(f"This run is saved to `{result['run_dir']}`. Approved replies go to outbox.json "
+                   "and held ones to on_hold.json as you review.")
     counts = decision_counts(result)
     waiting = counts["Pending"] + counts["On hold"]
     if waiting:
@@ -672,19 +813,9 @@ def outbox_section(result: dict) -> None:
     )
     st.caption("Nothing has been sent. Use “Open in Gmail” on each card to send it yourself.")
 
-    download, save_col, _ = st.columns([1, 1.2, 2.8])
+    download, _ = st.columns([1, 4])
     download.download_button("Download outbox.json", data=json.dumps(items, indent=2, ensure_ascii=False),
                              file_name="outbox.json", mime="application/json", width="stretch")
-    if save_col.button("Save outbox to project", width="stretch"):
-        try:
-            run_dir = make_run_dir()
-            save(run_dir, outbox=items)
-            st.session_state.last_saved = str((run_dir / "outbox.json").resolve())
-        except OSError as exc:
-            st.error(f"Couldn't save the outbox: {exc.strerror or exc}.")
-    if st.session_state.get("last_saved"):
-        st.success(f"Saved {len(items)} approved repl{'y' if len(items) == 1 else 'ies'} to "
-                   f"`{st.session_state.last_saved}`")
 
 
 # --- reply building ----------------------------------------------------------------------
@@ -840,7 +971,6 @@ def decide(msg_id: int, status: str) -> None:
     else:
         st.session_state.approved_at.pop(msg_id, None)
     st.session_state.feedback_open.discard(msg_id)
-    st.session_state.pop("last_saved", None)
 
 
 def reply_edited(msg_id: int) -> None:
@@ -855,7 +985,6 @@ def reopen_if_approved(msg_id: int) -> None:
     if st.session_state.decisions.get(msg_id) == "Approved":
         st.session_state.decisions.pop(msg_id)
         st.session_state.approved_at.pop(msg_id, None)
-        st.session_state.pop("last_saved", None)
 
 
 def toggle_feedback(msg_id: int) -> None:

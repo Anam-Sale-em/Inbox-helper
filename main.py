@@ -26,7 +26,19 @@ def main() -> None:
     if args.mock:
         os.environ["LLM_PROVIDER"] = "mock"
 
-    loaded = load_report(args.input)
+    if args.gmail:
+        from inbox import gmail_source
+        from inbox.google_auth import GoogleSetupError
+        try:
+            loaded = gmail_source.load_gmail(args.query, only_new=not args.all, interactive=True)
+        except GoogleSetupError as exc:
+            print(exc, file=sys.stderr)
+            sys.exit(2)
+        if not loaded.messages and not loaded.rejected:
+            print(f"No new emails match `{args.query or gmail_source.default_query()}`.")
+            return
+    else:
+        loaded = load_report(args.input)
     messages = loaded.messages
     for r in loaded.rejected:
         print(f"Skipped record {r['position']}: {r['reason']}")
@@ -52,12 +64,14 @@ def main() -> None:
     flags = check_drafts(unique, drafts, [])  # terminal: approver types slots with [e]dit
 
     # Saved before review so a Ctrl-C during review keeps the pipeline output.
-    run_dir = make_run_dir()
-    save(run_dir, classifications=dump(classifications), drafts=dump(drafts),
-         flags=flags, duplicates=duplicates, skipped_empty=[m.id for m in empty],
-         skipped_no_reply=no_reply,
-         skipped_records=loaded.rejected, renumbered=loaded.renumbered, ai_calls=llm.get_usage(),
-         input_messages=[m.model_dump(mode="json") for m in messages])  # scorers read this, not data/
+    run_dir = make_run_dir(suffix="_gmail" if args.gmail else "")  # runs/*_gmail is git-ignored
+    save_pipeline_output(run_dir, messages=messages, rejected=loaded.rejected,
+                         renumbered=loaded.renumbered, empty=empty, no_reply=no_reply,
+                         duplicates=duplicates, classifications=classifications, drafts=drafts,
+                         flags=flags, ai_calls=llm.get_usage())
+    if args.gmail:
+        from inbox import gmail_source
+        gmail_source.mark_seen(loaded.source_ids.values())  # only once the run is saved
 
     held: list[dict] = []
     outbox = review(groups, drafts, flags, held=held)
@@ -72,6 +86,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mock", action="store_true", help="replay recorded LLM responses")
     parser.add_argument("--context", default=str(DEFAULT_PATH),
                         help="recruiter facts: interview slots, reschedule policy, status timeline")
+    parser.add_argument("--gmail", action="store_true",
+                        help="read new candidate emails from Gmail (read-only) instead of --input")
+    parser.add_argument("--query", default=None, help="Gmail search (default: GMAIL_QUERY in .env)")
+    parser.add_argument("--all", action="store_true", help="with --gmail: include emails already loaded")
     return parser.parse_args()
 
 
@@ -178,8 +196,8 @@ def build_report(messages, duplicates, classifications, drafts, flags) -> dict:
     }
 
 
-def make_run_dir() -> Path:
-    run_dir = Path("runs") / datetime.now().strftime("%Y-%m-%d_%H%M%S")
+def make_run_dir(suffix: str = "") -> Path:
+    run_dir = Path("runs") / (datetime.now().strftime("%Y-%m-%d_%H%M%S") + suffix)
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
@@ -192,6 +210,16 @@ def save(run_dir: Path, **files: object) -> None:
     for name, data in files.items():
         text = json.dumps(data, indent=2, ensure_ascii=False)
         (run_dir / f"{name}.json").write_text(text, encoding="utf-8")
+
+
+def save_pipeline_output(run_dir: Path, *, messages, rejected, renumbered, empty, no_reply,
+                         duplicates, classifications, drafts, flags, ai_calls) -> None:
+    """What the scorers and the judge read. The terminal and the review screen save the same files."""
+    save(run_dir, classifications=dump(classifications), drafts=dump(drafts),
+         flags=flags, duplicates=duplicates, skipped_empty=[m.id for m in empty],
+         skipped_no_reply=no_reply, skipped_records=rejected, renumbered=renumbered,
+         ai_calls=ai_calls,
+         input_messages=[m.model_dump(mode="json") for m in messages])  # scorers read this, not data/
 
 
 def print_summary(report: dict, run_dir: Path) -> None:

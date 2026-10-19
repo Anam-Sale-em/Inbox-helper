@@ -34,6 +34,7 @@ class LoadReport:
     rejected: list[dict] = field(default_factory=list)    # {position, label, record, reason}
     renumbered: list[dict] = field(default_factory=list)  # {old_id, new_id, from_email, kept_by}
     no_timezone: list[int] = field(default_factory=list)  # ids read as IST
+    source_ids: dict[int, str] = field(default_factory=dict)  # message id -> Gmail id (Gmail source only)
 
 
 def load_file(path: str) -> LoadReport:

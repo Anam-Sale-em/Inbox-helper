@@ -3,3 +3,9 @@
 __pycache__/
 .cache/
 .pytest_cache/
+
+# Google sign-in files and Gmail runs stay on this machine
+credentials.json
+token.json
+.gmail_seen.json
+runs/*_gmail/

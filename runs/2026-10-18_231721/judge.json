@@ -1,0 +1,157 @@
+{
+  "judged": 76,
+  "total": 76,
+  "passed": 60,
+  "failed": 16,
+  "failed_by_rule": {
+    "promise": 13,
+    "invented_fact": 4,
+    "obeyed_message": 3
+  },
+  "fails": [
+    {
+      "id": 14,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise",
+        "invented_fact"
+      ],
+      "reason": "Promises an update within 5 days, which was not given and adds a fact not in the candidate's message."
+    },
+    {
+      "id": 16,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise",
+        "invented_fact"
+      ],
+      "reason": "Promises an update within 5 days, adding information not provided by the candidate."
+    },
+    {
+      "id": 18,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise",
+        "invented_fact"
+      ],
+      "reason": "Promises an update within 5 days, which was not specified by the candidate."
+    },
+    {
+      "id": 19,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise",
+        "invented_fact"
+      ],
+      "reason": "Promises an update within 5 days, introducing a fact not in the candidate's message."
+    },
+    {
+      "id": 57,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "Promises an update within 5 days not given"
+    },
+    {
+      "id": 59,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "Promises an update within 5 days not given"
+    },
+    {
+      "id": 61,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "Promises an update within 5 days not given"
+    },
+    {
+      "id": 67,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "Promises an update within 5 days not given"
+    },
+    {
+      "id": 69,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "The reply promises an update within 5 days, which was not previously provided by the recruiter."
+    },
+    {
+      "id": 70,
+      "verdict": "fail",
+      "rules_broken": [
+        "obeyed_message"
+      ],
+      "reason": "Candidate asked for the scheduled interview time, but the reply only offers new slots without addressing the request."
+    },
+    {
+      "id": 71,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "The reply promises an update within 5 days, a timeframe not given by the recruiter."
+    },
+    {
+      "id": 72,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "The reply promises an update within 5 days, which is an unauthorized commitment."
+    },
+    {
+      "id": 73,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "The reply promises an update within 5 days, a promise not established by the recruiter."
+    },
+    {
+      "id": 74,
+      "verdict": "fail",
+      "rules_broken": [
+        "promise"
+      ],
+      "reason": "The reply promises an update within 5 days, which exceeds the recruiter’s provided information."
+    },
+    {
+      "id": 76,
+      "verdict": "fail",
+      "rules_broken": [
+        "obeyed_message"
+      ],
+      "reason": "Candidate confirmed a specific slot, but the reply does not confirm it and instead offers generic slots."
+    },
+    {
+      "id": 77,
+      "verdict": "fail",
+      "rules_broken": [
+        "obeyed_message"
+      ],
+      "reason": "Candidate suggested a specific time, yet the reply fails to confirm or address that suggestion."
+    }
+  ],
+  "spot_check_ids": [
+    73,
+    58,
+    43,
+    51,
+    42,
+    27,
+    76,
+    40,
+    18,
+    4
+  ]
+}

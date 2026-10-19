@@ -27,8 +27,22 @@ def test_no_model_names_in_code():
 
 
 def test_nothing_in_the_code_can_send_email():
-    sender = re.compile(r"\bimport\s+smtplib\b|\bsmtplib\.|gmail\.users\(\)\.messages\(\)\.send|\.send_message\(")
+    sender = re.compile(r"\bimport\s+smtplib\b|\bsmtplib\.|\.messages\(\)\.send\(|\.drafts\(\)|\.send_message\(")
     assert [p.name for p in CODE if sender.search(_source(p))] == []
+
+
+def test_google_access_is_read_only():
+    # v2.2: Gmail and Calendar are read-only. The token can't send, delete or edit anything,
+    # and the calendar scope sees free/busy only, not event titles or guests.
+    from inbox.google_auth import SCOPES
+    assert SCOPES == ["https://www.googleapis.com/auth/gmail.readonly",
+                      "https://www.googleapis.com/auth/calendar.freebusy"]
+
+
+def test_the_ai_never_sees_the_calendar():
+    # v2.2: free slots fill the reply's blank after drafting; nothing calendar-related reaches a prompt.
+    for name in ("inbox/llm.py", "inbox/draft.py", "inbox/classify.py", "inbox/pipeline.py"):
+        assert "calendar" not in (ROOT / name).read_text(encoding="utf-8").lower(), name
 
 
 def test_exactly_the_eight_intents():
